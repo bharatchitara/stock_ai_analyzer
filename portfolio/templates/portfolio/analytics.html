@@ -1,0 +1,362 @@
+{% extends 'dashboard/base.html' %}
+{% load static %}
+
+{% block title %}Portfolio Analytics - Stock Market News AI{% endblock %}
+
+{% block extra_css %}
+<style>
+    .sector-card {
+        transition: all 0.3s;
+    }
+    .sector-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    }
+    .gain { color: #28a745; }
+    .loss { color: #dc3545; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h4 class="mb-1">Portfolio Analytics</h4>
+                    <p class="text-sm text-muted mb-0">Detailed insights into your investment portfolio</p>
+                </div>
+                <a href="{% url 'portfolio:dashboard' %}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left me-2"></i>Back to Portfolio
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Key Metrics -->
+    <div class="row mb-4">
+        <div class="col-xl-4 col-md-6 mb-4">
+            <div class="card">
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-8">
+                            <div class="numbers">
+                                <p class="text-sm mb-0 text-capitalize font-weight-bold">Total Stocks</p>
+                                <h5 class="font-weight-bolder mb-0">{{ analytics.total_stocks }}</h5>
+                                <p class="mb-0 text-sm">
+                                    <span class="text-success text-sm font-weight-bolder">{{ analytics.gainers_count }}</span> gainers
+                                    <span class="text-danger text-sm font-weight-bolder ms-2">{{ analytics.losers_count }}</span> losers
+                                </p>
+                            </div>
+                        </div>
+                        <div class="col-4 text-end">
+                            <div class="icon icon-shape bg-gradient-primary shadow text-center border-radius-md">
+                                <i class="fas fa-chart-bar text-lg opacity-10"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-4 col-md-6 mb-4">
+            <div class="card">
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-8">
+                            <div class="numbers">
+                                <p class="text-sm mb-0 text-capitalize font-weight-bold">Best Performer</p>
+                                {% if analytics.best_performer %}
+                                <h5 class="font-weight-bolder mb-0">{{ analytics.best_performer.stock.symbol }}</h5>
+                                <p class="mb-0">
+                                    <span class="text-success text-sm font-weight-bolder">
+                                        +{{ analytics.best_performer.pnl_percentage|floatformat:2 }}%
+                                    </span>
+                                </p>
+                                {% else %}
+                                <h5 class="font-weight-bolder mb-0">N/A</h5>
+                                <p class="mb-0 text-muted"><small>No profitable holdings</small></p>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="col-4 text-end">
+                            <div class="icon icon-shape bg-gradient-success shadow text-center border-radius-md">
+                                <i class="fas fa-trophy text-lg opacity-10"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-4 col-md-6 mb-4">
+            <div class="card">
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-8">
+                            <div class="numbers">
+                                <p class="text-sm mb-0 text-capitalize font-weight-bold">Worst Performer</p>
+                                {% if analytics.worst_performer %}
+                                <h5 class="font-weight-bolder mb-0">{{ analytics.worst_performer.stock.symbol }}</h5>
+                                <p class="mb-0">
+                                    <span class="text-danger text-sm font-weight-bolder">
+                                        {{ analytics.worst_performer.pnl_percentage|floatformat:2 }}%
+                                    </span>
+                                </p>
+                                {% else %}
+                                <h5 class="font-weight-bolder mb-0">N/A</h5>
+                                <p class="mb-0 text-muted"><small>No loss-making holdings</small></p>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="col-4 text-end">
+                            <div class="icon icon-shape bg-gradient-danger shadow text-center border-radius-md">
+                                <i class="fas fa-arrow-down text-lg opacity-10"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="row mb-4">
+        <!-- Sector Allocation Chart -->
+        <div class="col-lg-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header pb-0">
+                    <h6>Sector Allocation</h6>
+                    <p class="text-sm mb-0">Distribution of investments across sectors</p>
+                </div>
+                <div class="card-body p-3">
+                    <canvas id="sectorChart" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- P&L Distribution Chart -->
+        <div class="col-lg-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header pb-0">
+                    <h6>Profit & Loss Distribution</h6>
+                    <p class="text-sm mb-0">Gainers vs losers in your portfolio</p>
+                </div>
+                <div class="card-body p-3">
+                    <canvas id="pnlChart" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sector-wise Breakdown -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header pb-0">
+                    <h6>Sector-wise Performance</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        {% for sector, data in analytics.sector_allocation.items %}
+                        <div class="col-md-6 col-lg-3 mb-3">
+                            <div class="card sector-card border">
+                                <div class="card-body">
+                                    <h6 class="mb-2">{{ sector }}</h6>
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <span class="text-sm">Investment</span>
+                                        <strong class="text-sm">₹{{ data.investment|floatformat:2 }}</strong>
+                                    </div>
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <span class="text-sm">Value</span>
+                                        <strong class="text-sm">₹{{ data.current_value|floatformat:2 }}</strong>
+                                    </div>
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span class="text-sm">P&L</span>
+                                        <strong class="text-sm {% if data.pnl >= 0 %}gain{% else %}loss{% endif %}">
+                                            {% if data.pnl >= 0 %}+{% endif %}{{ data.pnl_percent|floatformat:2 }}%
+                                        </strong>
+                                    </div>
+                                    <div class="progress mt-2" style="height: 6px;">
+                                        <div class="progress-bar {% if data.pnl >= 0 %}bg-success{% else %}bg-danger{% endif %}" 
+                                             role="progressbar" 
+                                             style="width: {{ data.allocation_percent }}%" 
+                                             aria-valuenow="{{ data.allocation_percent }}" 
+                                             aria-valuemin="0" 
+                                             aria-valuemax="100">
+                                        </div>
+                                    </div>
+                                    <small class="text-muted">{{ data.allocation_percent|floatformat:1 }}% of portfolio</small>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Top Gainers & Losers -->
+    <div class="row">
+        <!-- Top Gainers -->
+        <div class="col-lg-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header pb-0">
+                    <h6>
+                        <i class="fas fa-arrow-up text-success me-2"></i>Top Gainers
+                    </h6>
+                </div>
+                <div class="card-body p-3">
+                    {% if analytics.top_gainers %}
+                    <ul class="list-group">
+                        {% for holding in analytics.top_gainers %}
+                        <li class="list-group-item border-0 d-flex justify-content-between ps-0 mb-2 border-radius-lg">
+                            <div class="d-flex align-items-center">
+                                <div class="icon icon-shape icon-sm me-3 bg-gradient-success shadow text-center">
+                                    <i class="fas fa-arrow-up text-white opacity-10"></i>
+                                </div>
+                                <div class="d-flex flex-column">
+                                    <h6 class="mb-1 text-dark text-sm">{{ holding.stock.symbol }}</h6>
+                                    <span class="text-xs">{{ holding.quantity }} shares @ ₹{{ holding.average_price|floatformat:2 }}</span>
+                                </div>
+                            </div>
+                                <div class="d-flex flex-column align-items-end">
+                                <span class="text-success text-sm font-weight-bold">+{{ holding.pnl_percentage|floatformat:2 }}%</span>
+                                <span class="text-xs text-success">+₹{{ holding.pnl|floatformat:2 }}</span>
+                            </div>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <p class="text-center text-muted py-4">No gainers yet</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Top Losers -->
+        <div class="col-lg-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header pb-0">
+                    <h6>
+                        <i class="fas fa-arrow-down text-danger me-2"></i>Top Losers
+                    </h6>
+                </div>
+                <div class="card-body p-3">
+                    {% if analytics.top_losers %}
+                    <ul class="list-group">
+                        {% for holding in analytics.top_losers %}
+                        <li class="list-group-item border-0 d-flex justify-content-between ps-0 mb-2 border-radius-lg">
+                            <div class="d-flex align-items-center">
+                                <div class="icon icon-shape icon-sm me-3 bg-gradient-danger shadow text-center">
+                                    <i class="fas fa-arrow-down text-white opacity-10"></i>
+                                </div>
+                                <div class="d-flex flex-column">
+                                    <h6 class="mb-1 text-dark text-sm">{{ holding.stock.symbol }}</h6>
+                                    <span class="text-xs">{{ holding.quantity }} shares @ ₹{{ holding.average_price|floatformat:2 }}</span>
+                                </div>
+                            </div>
+                            <div class="d-flex flex-column align-items-end">
+                                <span class="text-danger text-sm font-weight-bold">{{ holding.pnl_percentage|floatformat:2 }}%</span>
+                                <span class="text-xs text-danger">₹{{ holding.pnl|floatformat:2 }}</span>
+                            </div>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <p class="text-center text-muted py-4">No losers</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+<script>
+    // Sector Allocation Pie Chart
+    const sectorCtx = document.getElementById('sectorChart').getContext('2d');
+    const sectorData = {{ analytics.sector_chart_data|safe }};
+    
+    new Chart(sectorCtx, {
+        type: 'doughnut',
+        data: {
+            labels: sectorData.labels,
+            datasets: [{
+                data: sectorData.values,
+                backgroundColor: [
+                    '#4CAF50', '#2196F3', '#FF9800', '#F44336', '#9C27B0',
+                    '#00BCD4', '#FFEB3B', '#795548', '#607D8B', '#E91E63'
+                ],
+                borderWidth: 2,
+                borderColor: '#fff'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        padding: 15,
+                        font: { size: 11 }
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return context.label + ': ₹' + context.parsed.toLocaleString('en-IN', {maximumFractionDigits: 2});
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // P&L Distribution Bar Chart
+    const pnlCtx = document.getElementById('pnlChart').getContext('2d');
+    const pnlData = {{ analytics.pnl_chart_data|safe }};
+    
+    new Chart(pnlCtx, {
+        type: 'bar',
+        data: {
+            labels: pnlData.labels,
+            datasets: [{
+                label: 'P&L (₹)',
+                data: pnlData.values,
+                backgroundColor: pnlData.colors,
+                borderRadius: 5
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return 'P&L: ₹' + context.parsed.y.toLocaleString('en-IN', {maximumFractionDigits: 2});
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(value) {
+                            return '₹' + value.toLocaleString('en-IN');
+                        }
+                    }
+                }
+            }
+        }
+    });
+</script>
+{% endblock %}

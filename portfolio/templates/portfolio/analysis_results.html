@@ -1,0 +1,458 @@
+{% extends 'dashboard/base.html' %}
+{% load static %}
+
+{% block title %}Portfolio AI Analysis - Stock Market News AI{% endblock %}
+
+{% block extra_css %}
+<style>
+    .recommendation-badge {
+        font-size: 0.9rem;
+        padding: 0.4rem 0.8rem;
+    }
+    .risk-badge {
+        font-size: 0.75rem;
+    }
+    .holding-card {
+        transition: all 0.3s;
+        border-left: 4px solid #ddd;
+    }
+    .holding-card:hover {
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+    .holding-card.buy-recommendation {
+        border-left-color: #28a745;
+    }
+    .holding-card.sell-recommendation {
+        border-left-color: #dc3545;
+    }
+    .holding-card.hold-recommendation {
+        border-left-color: #ffc107;
+    }
+    .sentiment-bar {
+        height: 8px;
+        border-radius: 4px;
+        background: linear-gradient(to right, #dc3545, #ffc107, #28a745);
+    }
+    .technical-signal {
+        font-size: 0.85rem;
+        padding: 0.25rem 0.5rem;
+        margin: 0.25rem;
+        display: inline-block;
+    }
+    .news-item {
+        border-left: 3px solid #dee2e6;
+        padding-left: 0.75rem;
+        margin-bottom: 0.5rem;
+    }
+    .news-item.positive { border-left-color: #28a745; }
+    .news-item.negative { border-left-color: #dc3545; }
+    .news-item.neutral { border-left-color: #6c757d; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h4 class="mb-1">
+                        <i class="fas fa-robot text-info me-2"></i>AI Portfolio Analysis
+                    </h4>
+                    <p class="text-sm text-muted mb-0">
+                        Analyzed on {{ analysis.analyzed_at|date:"M d, Y H:i" }}
+                    </p>
+                </div>
+                <div>
+                    <a href="{% url 'portfolio:dashboard' %}" class="btn btn-outline-primary">
+                        <i class="fas fa-arrow-left me-2"></i>Back to Portfolio
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Portfolio Summary -->
+    <div class="row mb-4">
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card">
+                <div class="card-body p-3">
+                    <div class="d-flex">
+                        <div class="icon icon-shape bg-gradient-success shadow text-center border-radius-md">
+                            <i class="fas fa-arrow-up text-lg opacity-10"></i>
+                        </div>
+                        <div class="ms-3">
+                            <p class="text-sm mb-0 text-capitalize font-weight-bold">Buy Signals</p>
+                            <h5 class="font-weight-bolder mb-0 text-success">
+                                {{ analysis.portfolio_summary.buy_recommendations }}
+                            </h5>
+                            <small class="text-muted">stocks</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card">
+                <div class="card-body p-3">
+                    <div class="d-flex">
+                        <div class="icon icon-shape bg-gradient-danger shadow text-center border-radius-md">
+                            <i class="fas fa-arrow-down text-lg opacity-10"></i>
+                        </div>
+                        <div class="ms-3">
+                            <p class="text-sm mb-0 text-capitalize font-weight-bold">Sell Signals</p>
+                            <h5 class="font-weight-bolder mb-0 text-danger">
+                                {{ analysis.portfolio_summary.sell_recommendations }}
+                            </h5>
+                            <small class="text-muted">stocks</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card">
+                <div class="card-body p-3">
+                    <div class="d-flex">
+                        <div class="icon icon-shape bg-gradient-warning shadow text-center border-radius-md">
+                            <i class="fas fa-hand-paper text-lg opacity-10"></i>
+                        </div>
+                        <div class="ms-3">
+                            <p class="text-sm mb-0 text-capitalize font-weight-bold">Hold Signals</p>
+                            <h5 class="font-weight-bolder mb-0 text-warning">
+                                {{ analysis.portfolio_summary.hold_recommendations }}
+                            </h5>
+                            <small class="text-muted">stocks</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card">
+                <div class="card-body p-3">
+                    <div class="d-flex">
+                        <div class="icon icon-shape bg-gradient-dark shadow text-center border-radius-md">
+                            <i class="fas fa-exclamation-triangle text-lg opacity-10"></i>
+                        </div>
+                        <div class="ms-3">
+                            <p class="text-sm mb-0 text-capitalize font-weight-bold">High Risk</p>
+                            <h5 class="font-weight-bolder mb-0">
+                                {{ analysis.portfolio_summary.high_risk_count }}
+                            </h5>
+                            <small class="text-muted">stocks</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Holdings Analysis -->
+    {% for holding in analysis.holdings_analysis %}
+    <div class="card mb-4 holding-card {{ holding.recommendation|lower }}-recommendation">
+        <div class="card-body">
+            <!-- Header -->
+            <div class="row mb-3">
+                <div class="col-md-8">
+                    <h5 class="mb-1">
+                        <strong>{{ holding.stock_symbol }}</strong> - {{ holding.stock_name }}
+                    </h5>
+                    <p class="text-sm text-muted mb-2">
+                        Qty: {{ holding.holding_quantity }} | Avg: ₹{{ holding.average_price }} | Current: ₹{{ holding.current_price }}
+                    </p>
+                    <div class="d-flex gap-2 flex-wrap align-items-center">
+                        <span class="badge recommendation-badge 
+                            {% if holding.recommendation == 'BUY' %}bg-success
+                            {% elif holding.recommendation == 'SELL' %}bg-danger
+                            {% else %}bg-warning{% endif %}">
+                            <i class="fas 
+                                {% if holding.recommendation == 'BUY' %}fa-arrow-up
+                                {% elif holding.recommendation == 'SELL' %}fa-arrow-down
+                                {% else %}fa-hand-paper{% endif %} me-1"></i>
+                            {{ holding.recommendation }}
+                        </span>
+                        <span class="badge risk-badge 
+                            {% if holding.risk_level == 'HIGH' %}bg-danger
+                            {% elif holding.risk_level == 'LOW' %}bg-success
+                            {% else %}bg-warning{% endif %}">
+                            Risk: {{ holding.risk_level }}
+                        </span>
+                        <span class="badge bg-info">
+                            Confidence: {{ holding.confidence }}%
+                        </span>
+                        <span class="badge 
+                            {% if holding.pnl > 0 %}bg-success
+                            {% elif holding.pnl < 0 %}bg-danger
+                            {% else %}bg-secondary{% endif %}">
+                            P&L: {% if holding.pnl > 0 %}+{% endif %}₹{{ holding.pnl|floatformat:2 }} ({{ holding.pnl_percentage|floatformat:2 }}%)
+                        </span>
+                    </div>
+                </div>
+                <div class="col-md-4 text-md-end">
+                    {% if holding.target_price %}
+                    <div class="mb-2">
+                        <small class="text-muted d-block">Target Price</small>
+                        <strong class="text-success">₹{{ holding.target_price }}</strong>
+                    </div>
+                    {% endif %}
+                    {% if holding.stop_loss %}
+                    <div>
+                        <small class="text-muted d-block">Stop Loss</small>
+                        <strong class="text-danger">₹{{ holding.stop_loss }}</strong>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Recommendation Reasoning -->
+            <div class="alert alert-light mb-3">
+                <strong><i class="fas fa-lightbulb me-2"></i>AI Reasoning:</strong>
+                <p class="mb-0 mt-2">{{ holding.reasoning }}</p>
+            </div>
+
+            <!-- Tabs -->
+            <ul class="nav nav-tabs mb-3" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#news-{{ forloop.counter }}" type="button">
+                        <i class="fas fa-newspaper me-1"></i>News & Sentiment
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#technical-{{ forloop.counter }}" type="button">
+                        <i class="fas fa-chart-line me-1"></i>Technical Analysis
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#valuation-{{ forloop.counter }}" type="button">
+                        <i class="fas fa-balance-scale me-1"></i>Valuation
+                    </button>
+                </li>
+            </ul>
+
+            <div class="tab-content">
+                <!-- News & Sentiment Tab -->
+                <div class="tab-pane fade show active" id="news-{{ forloop.counter }}">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6 class="mb-3">Sentiment Analysis</h6>
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between mb-2">
+                                    <span>Sentiment Score</span>
+                                    {% if holding.sentiment_score is not None %}
+                                        <strong class="
+                                            {% if holding.sentiment_score > 0.3 %}text-success
+                                            {% elif holding.sentiment_score < -0.3 %}text-danger
+                                            {% else %}text-warning{% endif %}">
+                                            {{ holding.sentiment_score|floatformat:2 }}
+                                        </strong>
+                                    {% else %}
+                                        <strong class="text-muted">N/A</strong>
+                                    {% endif %}
+                                </div>
+                                {% if holding.sentiment_score is not None %}
+                                    <div class="progress" style="height: 10px;">
+                                        {% widthratio holding.sentiment_score|add:1 2 100 as sentiment_width %}
+                                        <div class="progress-bar 
+                                            {% if holding.sentiment_score > 0.3 %}bg-success
+                                            {% elif holding.sentiment_score < -0.3 %}bg-danger
+                                            {% else %}bg-warning{% endif %}"
+                                            style="width: {% if sentiment_width %}{{ sentiment_width }}{% else %}50{% endif %}%">
+                                        </div>
+                                    </div>
+                                {% else %}
+                                    <div class="alert alert-light py-2 mb-0">
+                                        <small>No sentiment data available</small>
+                                    </div>
+                                {% endif %}
+                            </div>
+                            <p class="text-sm">{{ holding.news_summary }}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <h6 class="mb-3">Recent News (Last 30 days)</h6>
+                            {% if holding.recent_news %}
+                                {% for article in holding.recent_news %}
+                                <div class="news-item {{ article.sentiment|lower }}">
+                                    <div class="d-flex justify-content-between">
+                                        <strong class="text-sm">{{ article.title|truncatewords:10 }}</strong>
+                                        <span class="badge bg-{{ article.sentiment|lower }}">{{ article.sentiment }}</span>
+                                    </div>
+                                    <small class="text-muted">{{ article.published_at }}</small>
+                                </div>
+                                {% endfor %}
+                            {% else %}
+                                <p class="text-muted text-sm">No recent news available</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Technical Analysis Tab -->
+                <div class="tab-pane fade" id="technical-{{ forloop.counter }}">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6 class="mb-3">Price Trend</h6>
+                            <div class="mb-3">
+                                <span class="badge bg-{{ holding.technical_signals.trend|lower }} mb-2">
+                                    {{ holding.technical_signals.trend }}
+                                </span>
+                            </div>
+                            
+                            {% if holding.technical_signals.ma_20 %}
+                            <div class="mb-2">
+                                <small class="text-muted">20-Day MA:</small>
+                                <strong class="ms-2">₹{{ holding.technical_signals.ma_20|floatformat:2 }}</strong>
+                            </div>
+                            {% endif %}
+                            
+                            {% if holding.technical_signals.ma_50 %}
+                            <div class="mb-2">
+                                <small class="text-muted">50-Day MA:</small>
+                                <strong class="ms-2">₹{{ holding.technical_signals.ma_50|floatformat:2 }}</strong>
+                            </div>
+                            {% endif %}
+                            
+                            {% if holding.technical_signals.support %}
+                            <div class="mb-2">
+                                <small class="text-muted">Support:</small>
+                                <strong class="ms-2 text-success">₹{{ holding.technical_signals.support|floatformat:2 }}</strong>
+                            </div>
+                            {% endif %}
+                            
+                            {% if holding.technical_signals.resistance %}
+                            <div class="mb-2">
+                                <small class="text-muted">Resistance:</small>
+                                <strong class="ms-2 text-danger">₹{{ holding.technical_signals.resistance|floatformat:2 }}</strong>
+                            </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <h6 class="mb-3">Technical Signals</h6>
+                            {% if holding.technical_signals.signals %}
+                                {% for signal in holding.technical_signals.signals %}
+                                <span class="badge technical-signal bg-light text-dark border">
+                                    <i class="fas fa-chart-area me-1"></i>{{ signal }}
+                                </span>
+                                {% endfor %}
+                            {% else %}
+                                <p class="text-muted text-sm">No significant signals detected</p>
+                            {% endif %}
+                            
+                            <div class="mt-3">
+                                <h6 class="mb-2">Price Changes</h6>
+                                {% if holding.technical_signals.price_change_5d is not None %}
+                                <div class="mb-2">
+                                    <small class="text-muted">5-Day:</small>
+                                    <strong class="ms-2 {% if holding.technical_signals.price_change_5d > 0 %}text-success{% elif holding.technical_signals.price_change_5d < 0 %}text-danger{% else %}text-muted{% endif %}">
+                                        {% if holding.technical_signals.price_change_5d > 0 %}+{% endif %}{{ holding.technical_signals.price_change_5d|floatformat:2 }}%
+                                    </strong>
+                                </div>
+                                {% endif %}
+                                {% if holding.technical_signals.price_change_20d is not None %}
+                                <div class="mb-2">
+                                    <small class="text-muted">20-Day:</small>
+                                    <strong class="ms-2 {% if holding.technical_signals.price_change_20d > 0 %}text-success{% elif holding.technical_signals.price_change_20d < 0 %}text-danger{% else %}text-muted{% endif %}">
+                                        {% if holding.technical_signals.price_change_20d > 0 %}+{% endif %}{{ holding.technical_signals.price_change_20d|floatformat:2 }}%
+                                    </strong>
+                                </div>
+                                {% endif %}
+                                {% if holding.technical_signals.price_change_5d is None and holding.technical_signals.price_change_20d is None %}
+                                <p class="text-muted text-sm">Insufficient data for price change calculation</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Valuation Tab -->
+                <div class="tab-pane fade" id="valuation-{{ forloop.counter }}">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6 class="mb-3">Valuation Status</h6>
+                            <div class="mb-3">
+                                <span class="badge bg-{{ holding.valuation_status|lower }} p-2 fs-6">
+                                    {{ holding.valuation_status }}
+                                </span>
+                            </div>
+                            
+                            {% if holding.valuation_metrics.current_price %}
+                            <div class="mb-3">
+                                <small class="text-muted d-block mb-1">Current Price:</small>
+                                <h5 class="mb-0">₹{{ holding.valuation_metrics.current_price|floatformat:2 }}</h5>
+                            </div>
+                            {% endif %}
+                            
+                            {% if holding.valuation_metrics.3mo_avg_price %}
+                            <div class="mb-3">
+                                <small class="text-muted d-block mb-1">3-Month Average:</small>
+                                <h6 class="mb-0">₹{{ holding.valuation_metrics.3mo_avg_price|floatformat:2 }}</h6>
+                            </div>
+                            {% endif %}
+                            
+                            {% if holding.valuation_metrics.deviation_percent is not None %}
+                            <div class="mb-3">
+                                <small class="text-muted d-block mb-1">Deviation from Average:</small>
+                                <h6 class="mb-0 {% if holding.valuation_metrics.deviation_percent > 0 %}text-danger{% elif holding.valuation_metrics.deviation_percent < 0 %}text-success{% else %}text-muted{% endif %}">
+                                    {% if holding.valuation_metrics.deviation_percent > 0 %}+{% endif %}{{ holding.valuation_metrics.deviation_percent|floatformat:2 }}%
+                                </h6>
+                            </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <h6 class="mb-3">Interpretation</h6>
+                            {% if holding.valuation_status == 'OVERVALUED' %}
+                            <div class="alert alert-warning">
+                                <i class="fas fa-exclamation-triangle me-2"></i>
+                                <strong>Overvalued:</strong> The current price is significantly higher than the 3-month average. 
+                                Consider booking profits or waiting for a better entry point.
+                            </div>
+                            {% elif holding.valuation_status == 'UNDERVALUED' %}
+                            <div class="alert alert-success">
+                                <i class="fas fa-check-circle me-2"></i>
+                                <strong>Undervalued:</strong> The current price is below the 3-month average. 
+                                This could be a good buying opportunity if fundamentals are strong.
+                            </div>
+                            {% else %}
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle me-2"></i>
+                                <strong>Fair Value:</strong> The stock is trading near its average price. 
+                                Hold and monitor for better opportunities.
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+
+    {% if not analysis.holdings_analysis %}
+    <div class="card">
+        <div class="card-body text-center py-5">
+            <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+            <h5>No Holdings to Analyze</h5>
+            <p class="text-muted">Add stocks to your portfolio to get AI-powered analysis</p>
+            <a href="{% url 'portfolio:dashboard' %}" class="btn btn-primary mt-3">
+                <i class="fas fa-plus me-2"></i>Add Holdings
+            </a>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Add any interactive features here
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('Portfolio analysis loaded');
+});
+</script>
+{% endblock %}

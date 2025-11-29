@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Stock News AI Dashboard{% endblock %}</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet">
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Custom CSS -->
+    <style>
+        .navbar-brand {
+            font-weight: bold;
+            color: #2c3e50 !important;
+        }
+        
+        .card {
+            border: none;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            transition: transform 0.2s;
+        }
+        
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+        }
+        
+        .sentiment-positive {
+            color: #28a745;
+            background-color: rgba(40, 167, 69, 0.1);
+        }
+        
+        .sentiment-negative {
+            color: #dc3545;
+            background-color: rgba(220, 53, 69, 0.1);
+        }
+        
+        .sentiment-neutral {
+            color: #6c757d;
+            background-color: rgba(108, 117, 125, 0.1);
+        }
+        
+        .recommendation-buy {
+            color: #28a745;
+            background-color: rgba(40, 167, 69, 0.1);
+        }
+        
+        /* Progress toast animations */
+        @keyframes slideInRight {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        
+        #progress-toast-container .toast {
+            animation: slideInRight 0.3s ease-out;
+        }
+        
+        /* Processing indicator */
+        .btn-processing {
+            position: relative;
+            pointer-events: none;
+            opacity: 0.7;
+        }
+        
+        .btn-processing::after {
+            content: '';
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            top: 50%;
+            left: 10px;
+            margin-top: -8px;
+            border: 2px solid transparent;
+            border-top-color: currentColor;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .recommendation-sell {
+            color: #dc3545;
+            background-color: rgba(220, 53, 69, 0.1);
+        }
+        
+        .recommendation-hold {
+            color: #ffc107;
+            background-color: rgba(255, 193, 7, 0.1);
+        }
+        
+        .recommendation-watch {
+            color: #17a2b8;
+            background-color: rgba(23, 162, 184, 0.1);
+        }
+        
+        .pre-market-badge {
+            background-color: #ff6b6b;
+            color: white;
+        }
+        
+        .impact-high {
+            border-left: 4px solid #dc3545;
+        }
+        
+        .impact-medium {
+            border-left: 4px solid #ffc107;
+        }
+        
+        .impact-low {
+            border-left: 4px solid #28a745;
+        }
+        
+        .news-card {
+            margin-bottom: 1rem;
+        }
+        
+        .stats-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .chart-container {
+            position: relative;
+            height: 300px;
+        }
+        
+        footer {
+            background-color: #2c3e50;
+            color: white;
+            margin-top: 50px;
+            padding: 20px 0;
+        }
+    </style>
+</head>
+<body class="bg-light">
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
+        <div class="container">
+            <a class="navbar-brand" href="{% url 'dashboard:home' %}">
+                <i class="bi bi-graph-up-arrow"></i> Stock News AI
+            </a>
+            
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'dashboard:home' %}">
+                            <i class="bi bi-house"></i> Dashboard
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'dashboard:news_list' %}">
+                            <i class="bi bi-newspaper"></i> News
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'dashboard:recommendations' %}">
+                            <i class="bi bi-lightbulb"></i> Recommendations
+                        </a>
+                    </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="portfolioDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-briefcase"></i> Portfolio
+                        </a>
+                        <ul class="dropdown-menu" aria-labelledby="portfolioDropdown">
+                            <li><a class="dropdown-item" href="{% url 'portfolio:dashboard' %}"><i class="bi bi-grid"></i> Dashboard</a></li>
+                            <li><a class="dropdown-item" href="{% url 'portfolio:analytics' %}"><i class="bi bi-bar-chart"></i> Analytics</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{% url 'portfolio:import_portfolio' %}"><i class="bi bi-upload"></i> Import Portfolio</a></li>
+                        </ul>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'dashboard:watchlist' %}">
+                            <i class="bi bi-bookmark-star"></i> Watchlist
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="container my-4">
+        {% block content %}
+        {% endblock %}
+    </main>
+
+    <!-- Footer -->
+    <footer class="text-center">
+        <div class="container">
+            <p class="mb-0">
+                &copy; 2024 Stock News AI - Indian Market Analysis Platform
+                <br><small>Powered by AI for Pre-Market Intelligence</small>
+            </p>
+        </div>
+    </footer>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Custom JavaScript -->
+    <script>
+        // Auto-refresh charts every 5 minutes
+        setInterval(function() {
+            if (typeof updateCharts === 'function') {
+                updateCharts();
+            }
+        }, 300000); // 5 minutes
+        
+        // Show loading states
+        function showLoading(elementId) {
+            document.getElementById(elementId).innerHTML = 
+                '<div class="text-center"><div class="spinner-border" role="status"></div></div>';
+        }
+        
+        // Time formatting helper
+        function formatTime(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleTimeString('en-IN', { 
+                timeZone: 'Asia/Kolkata',
+                hour: '2-digit', 
+                minute: '2-digit' 
+            });
+        }
+        
+        // Progress toast notification system
+        class ProgressToast {
+            constructor() {
+                this.createContainer();
+            }
+            
+            createContainer() {
+                if (!document.getElementById('progress-toast-container')) {
+                    const container = document.createElement('div');
+                    container.id = 'progress-toast-container';
+                    container.style.cssText = 'position: fixed; bottom: 20px; right: 20px; z-index: 9999; max-width: 350px;';
+                    document.body.appendChild(container);
+                }
+            }
+            
+            show(message, type = 'info', duration = 0) {
+                const container = document.getElementById('progress-toast-container');
+                const toastId = 'toast-' + Date.now();
+                
+                const bgColors = {
+                    'info': 'bg-info',
+                    'success': 'bg-success',
+                    'warning': 'bg-warning',
+                    'error': 'bg-danger',
+                    'processing': 'bg-primary'
+                };
+                
+                const icons = {
+                    'info': '💡',
+                    'success': '✅',
+                    'warning': '⚠️',
+                    'error': '❌',
+                    'processing': '⏳'
+                };
+                
+                const toast = document.createElement('div');
+                toast.id = toastId;
+                toast.className = `toast show ${bgColors[type]} text-white mb-2`;
+                toast.setAttribute('role', 'alert');
+                toast.style.cssText = 'min-width: 300px;';
+                
+                toast.innerHTML = `
+                    <div class="toast-header ${bgColors[type]} text-white border-0">
+                        <strong class="me-auto">${icons[type]} ${type === 'processing' ? 'Processing' : type.charAt(0).toUpperCase() + type.slice(1)}</strong>
+                        ${duration > 0 ? '<button type="button" class="btn-close btn-close-white" onclick="this.closest(\'.toast\').remove()"></button>' : ''}
+                    </div>
+                    <div class="toast-body">
+                        ${message}
+                        ${type === 'processing' ? '<div class="progress mt-2" style="height: 5px;"><div class="progress-bar progress-bar-striped progress-bar-animated" style="width: 100%"></div></div>' : ''}
+                    </div>
+                `;
+                
+                container.appendChild(toast);
+                
+                if (duration > 0) {
+                    setTimeout(() => {
+                        toast.remove();
+                    }, duration);
+                }
+                
+                return toastId;
+            }
+            
+            remove(toastId) {
+                const toast = document.getElementById(toastId);
+                if (toast) {
+                    toast.remove();
+                }
+            }
+        }
+        
+        const progressToast = new ProgressToast();
+        
+        // Intercept form submissions for async operations
+        document.addEventListener('DOMContentLoaded', function() {
+            // Handle AI Analysis button
+            const aiAnalysisForm = document.querySelector('form[action*="analyze"]');
+            if (aiAnalysisForm) {
+                aiAnalysisForm.addEventListener('submit', function(e) {
+                    progressToast.show('🤖 AI analysis started! Analyzing your portfolio...', 'processing');
+                });
+            }
+            
+            // Handle Refresh Prices button
+            const refreshPricesForm = document.querySelector('form[action*="refresh-prices"]');
+            if (refreshPricesForm) {
+                refreshPricesForm.addEventListener('submit', function(e) {
+                    progressToast.show('💰 Fetching latest stock prices... You can continue working.', 'processing');
+                });
+            }
+            
+            // Handle Import forms
+            const importForms = document.querySelectorAll('form[action*="import"]');
+            importForms.forEach(form => {
+                form.addEventListener('submit', function(e) {
+                    const method = form.querySelector('input[name="import_method"]')?.value;
+                    if (method === 'image') {
+                        progressToast.show('📸 Processing image... Extracting holdings with AI.', 'processing');
+                    } else if (method === 'file') {
+                        progressToast.show('📁 Importing portfolio... Please wait.', 'processing');
+                    }
+                });
+            });
+        });
+    </script>
+    
+    {% block extra_js %}
+    {% endblock %}
+</body>
+</html>

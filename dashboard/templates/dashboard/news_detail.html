@@ -1,0 +1,130 @@
+{% extends 'dashboard/base.html' %}
+
+{% block title %}{{ article.title }} - Stock News AI{% endblock %}
+
+{% block content %}
+<div class="row mb-3">
+    <div class="col-12">
+        <a href="{% url 'dashboard:news_list' %}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left"></i> Back to News
+        </a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-8">
+        <div class="card mb-4">
+            <div class="card-body">
+                <h2 class="card-title">{{ article.title }}</h2>
+                
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div>
+                        <span class="badge sentiment-{{ article.sentiment|lower }} me-2">
+                            {{ article.sentiment|upper }}
+                        </span>
+                        {% if article.category %}
+                        <span class="badge bg-secondary me-2">{{ article.category.name }}</span>
+                        {% endif %}
+                        {% if article.is_pre_market %}
+                        <span class="badge pre-market-badge">Pre-Market</span>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="text-muted small">
+                        <i class="bi bi-clock"></i> {{ article.published_at|date:"F j, Y \a\t H:i" }}
+                    </div>
+                </div>
+                
+                {% if article.source %}
+                <p class="text-muted">
+                    <i class="bi bi-newspaper"></i> Source: <strong>{{ article.source.name }}</strong>
+                    {% if article.url %}
+                    | <a href="{{ article.url }}" target="_blank" rel="noopener">View Original <i class="bi bi-box-arrow-up-right"></i></a>
+                    {% endif %}
+                </p>
+                {% endif %}
+                
+                <hr>
+                
+                {% if article.summary %}
+                <div class="alert alert-light">
+                    <strong>Summary:</strong> {{ article.summary }}
+                </div>
+                {% endif %}
+                
+                <div class="article-content">
+                    {{ article.content|linebreaks }}
+                </div>
+                
+                {% if article.mentioned_stocks.all %}
+                <hr>
+                <div class="mt-3">
+                    <h5>Mentioned Stocks:</h5>
+                    <div class="row">
+                        {% for stock in article.mentioned_stocks.all %}
+                        <div class="col-md-6 mb-2">
+                            <div class="card">
+                                <div class="card-body">
+                                    <h6>{{ stock.symbol }} - {{ stock.company_name }}</h6>
+                                    {% if stock.current_price %}
+                                    <p class="mb-0">
+                                        Current Price: <strong>₹{{ stock.current_price }}</strong>
+                                    </p>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-4">
+        {% if related_recommendations %}
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-lightbulb"></i> Related Recommendations</h5>
+            </div>
+            <div class="card-body">
+                {% for rec in related_recommendations %}
+                <div class="mb-3 pb-3 {% if not forloop.last %}border-bottom{% endif %}">
+                    <h6>{{ rec.stock.symbol }}</h6>
+                    <span class="badge recommendation-{{ rec.recommendation|lower }} mb-2">
+                        {{ rec.recommendation|upper }}
+                    </span>
+                    <p class="small mb-1">{{ rec.reasoning|truncatewords:20 }}</p>
+                    <div class="small text-muted">
+                        <i class="bi bi-graph-up"></i> Target: ₹{{ rec.target_price }}
+                        <br>
+                        <i class="bi bi-percent"></i> Confidence: {{ rec.confidence_level }}%
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+        
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-bar-chart"></i> Article Stats</h5>
+            </div>
+            <div class="card-body">
+                <p><strong>Views:</strong> {{ article.view_count }}</p>
+                <p><strong>Impact Level:</strong> 
+                    <span class="badge {% if article.impact_level == 'high' %}bg-danger{% elif article.impact_level == 'medium' %}bg-warning{% else %}bg-success{% endif %}">
+                        {{ article.impact_level|upper }}
+                    </span>
+                </p>
+                {% if article.ai_processed %}
+                <p class="text-success mb-0">
+                    <i class="bi bi-check-circle"></i> AI Analyzed
+                </p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

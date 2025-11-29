@@ -1,0 +1,147 @@
+{% extends 'dashboard/base.html' %}
+
+{% block title %}News - Stock News AI{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h2><i class="bi bi-newspaper"></i> Market News</h2>
+        <p class="text-muted">Browse and filter latest market news articles</p>
+    </div>
+</div>
+
+<!-- Filters Section -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <form method="get" class="row g-3">
+                    <div class="col-md-3">
+                        <label class="form-label">Date Range</label>
+                        <select name="date" class="form-select">
+                            <option value="today" {% if current_filters.date == 'today' %}selected{% endif %}>Today</option>
+                            <option value="yesterday" {% if current_filters.date == 'yesterday' %}selected{% endif %}>Yesterday</option>
+                            <option value="week" {% if current_filters.date == 'week' %}selected{% endif %}>Last 7 Days</option>
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-3">
+                        <label class="form-label">Category</label>
+                        <select name="category" class="form-select">
+                            <option value="">All Categories</option>
+                            {% for cat in categories %}
+                            <option value="{{ cat.name }}" {% if current_filters.category == cat.name %}selected{% endif %}>
+                                {{ cat.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-3">
+                        <label class="form-label">Sentiment</label>
+                        <select name="sentiment" class="form-select">
+                            <option value="">All Sentiments</option>
+                            <option value="positive" {% if current_filters.sentiment == 'positive' %}selected{% endif %}>Positive</option>
+                            <option value="negative" {% if current_filters.sentiment == 'negative' %}selected{% endif %}>Negative</option>
+                            <option value="neutral" {% if current_filters.sentiment == 'neutral' %}selected{% endif %}>Neutral</option>
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-3">
+                        <label class="form-label">&nbsp;</label>
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-funnel"></i> Apply Filters
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- News Articles -->
+<div class="row">
+    <div class="col-12">
+        {% if page_obj %}
+            {% for article in page_obj %}
+            <div class="card news-card">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <h5 class="card-title mb-0">
+                            <a href="{% url 'dashboard:news_detail' article.id %}" class="text-decoration-none">
+                                {{ article.title }}
+                            </a>
+                        </h5>
+                        <span class="badge sentiment-{{ article.sentiment|lower }}">
+                            {{ article.sentiment|upper }}
+                        </span>
+                    </div>
+                    
+                    <p class="card-text text-muted small mb-2">
+                        {{ article.summary|truncatewords:30 }}
+                    </p>
+                    
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            {% if article.category %}
+                            <span class="badge bg-secondary me-2">{{ article.category.name }}</span>
+                            {% endif %}
+                            {% if article.is_pre_market %}
+                            <span class="badge pre-market-badge">Pre-Market</span>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="text-muted small">
+                            <i class="bi bi-clock"></i> {{ article.published_at|date:"M d, Y H:i" }}
+                            {% if article.source %}
+                            | <i class="bi bi-newspaper"></i> {{ article.source.name }}
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    {% if article.mentioned_stocks.all %}
+                    <div class="mt-2">
+                        <small class="text-muted">Stocks: </small>
+                        {% for stock in article.mentioned_stocks.all %}
+                        <span class="badge bg-light text-dark">{{ stock.symbol }}</span>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+            
+            <!-- Pagination -->
+            {% if page_obj.has_other_pages %}
+            <nav class="mt-4">
+                <ul class="pagination justify-content-center">
+                    {% if page_obj.has_previous %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if current_filters.date %}&date={{ current_filters.date }}{% endif %}{% if current_filters.category %}&category={{ current_filters.category }}{% endif %}{% if current_filters.sentiment %}&sentiment={{ current_filters.sentiment }}{% endif %}">Previous</a>
+                    </li>
+                    {% endif %}
+                    
+                    <li class="page-item active">
+                        <span class="page-link">
+                            Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+                        </span>
+                    </li>
+                    
+                    {% if page_obj.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if current_filters.date %}&date={{ current_filters.date }}{% endif %}{% if current_filters.category %}&category={{ current_filters.category }}{% endif %}{% if current_filters.sentiment %}&sentiment={{ current_filters.sentiment }}{% endif %}">Next</a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </nav>
+            {% endif %}
+        {% else %}
+            <div class="alert alert-info">
+                <i class="bi bi-info-circle"></i> No news articles found matching your filters.
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

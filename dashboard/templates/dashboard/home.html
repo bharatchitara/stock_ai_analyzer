@@ -1,0 +1,427 @@
+{% extends 'dashboard/base.html' %}
+
+{% block title %}Dashboard - Stock News AI{% endblock %}
+
+{% block content %}
+<!-- Market Status Alert -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="alert alert-info d-flex align-items-center" role="alert">
+            <i class="bi bi-clock me-2"></i>
+            <div>
+                <strong>Pre-Market Analysis Complete</strong> - 
+                News collected until 9:10 AM IST for {{ today|date:"F j, Y" }}
+                <small class="ms-2">
+                    ({{ market_session.total_news_collected }} articles analyzed)
+                </small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Stats Cards -->
+<div class="row mb-4">
+    <div class="col-md-3 mb-3">
+        <div class="card stats-card h-100">
+            <div class="card-body text-center">
+                <i class="bi bi-newspaper fs-1 mb-2"></i>
+                <h3 class="mb-0">{{ pre_market_news|length }}</h3>
+                <p class="mb-0">Pre-Market News</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-3">
+        <div class="card stats-card h-100">
+            <div class="card-body text-center">
+                <i class="bi bi-lightbulb fs-1 mb-2"></i>
+                <h3 class="mb-0">{{ latest_recommendations|length }}</h3>
+                <p class="mb-0">Active Recommendations</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-3">
+        <div class="card stats-card h-100">
+            <div class="card-body text-center">
+                <i class="bi bi-graph-up fs-1 mb-2"></i>
+                <h3 class="mb-0" id="positive-count">-</h3>
+                <p class="mb-0">Positive Sentiment</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-3">
+        <div class="card stats-card h-100">
+            <div class="card-body text-center">
+                <i class="bi bi-exclamation-triangle fs-1 mb-2"></i>
+                <h3 class="mb-0" id="negative-count">-</h3>
+                <p class="mb-0">Negative Sentiment</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Row -->
+<div class="row mb-4">
+    <div class="col-md-6 mb-3">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-pie-chart"></i> Sentiment Distribution</h5>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="sentimentChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6 mb-3">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-bar-chart"></i> News Categories</h5>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="categoryChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Latest Pre-Market News -->
+<div class="row mb-4">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-newspaper"></i> Latest Pre-Market News</h5>
+                <a href="{% url 'dashboard:news_list' %}" class="btn btn-sm btn-outline-primary">
+                    View All <i class="bi bi-arrow-right"></i>
+                </a>
+            </div>
+            <div class="card-body p-0">
+                {% for article in pre_market_news %}
+                <div class="news-card p-3 border-bottom impact-{{ article.impact_level|lower }}">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div class="flex-grow-1">
+                            <h6 class="mb-1">
+                                <a href="{% url 'dashboard:news_detail' article.id %}" 
+                                   class="text-decoration-none text-dark">
+                                    {{ article.title }}
+                                </a>
+                            </h6>
+                            <p class="text-muted small mb-2">
+                                {{ article.summary|truncatewords:20 }}
+                            </p>
+                            <div class="d-flex align-items-center gap-2 small text-muted">
+                                <span>{{ article.source.name }}</span>
+                                <span>•</span>
+                                <span>{{ article.published_at|timesince }} ago</span>
+                                {% if article.category %}
+                                <span>•</span>
+                                <span class="badge bg-secondary">{{ article.category }}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="ms-3 text-end">
+                            {% if article.is_pre_market %}
+                            <span class="badge pre-market-badge mb-2">Pre-Market</span>
+                            {% endif %}
+                            <div>
+                                <span class="badge sentiment-{{ article.sentiment|lower }}">
+                                    {{ article.get_sentiment_display }}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    {% if article.mentioned_stocks.exists %}
+                    <div class="mt-2">
+                        <small class="text-muted">Mentioned stocks: </small>
+                        {% for stock in article.mentioned_stocks.all %}
+                        <span class="badge bg-light text-dark">{{ stock.symbol }}</span>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+                {% empty %}
+                <div class="p-4 text-center text-muted">
+                    <i class="bi bi-inbox fs-1 mb-3 d-block"></i>
+                    <p>No pre-market news available for today.</p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- Latest Recommendations -->
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-lightbulb"></i> Top Recommendations</h5>
+                <a href="{% url 'dashboard:recommendations' %}" class="btn btn-sm btn-outline-primary">
+                    View All <i class="bi bi-arrow-right"></i>
+                </a>
+            </div>
+            <div class="card-body p-0">
+                {% for rec in latest_recommendations %}
+                <div class="p-3 border-bottom">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="mb-0">{{ rec.stock.symbol }}</h6>
+                        <span class="badge recommendation-{{ rec.recommendation|lower }}">
+                            {{ rec.get_recommendation_display }}
+                        </span>
+                    </div>
+                    <p class="small text-muted mb-2">{{ rec.stock.company_name }}</p>
+                    <div class="d-flex justify-content-between align-items-center small">
+                        <span class="text-muted">Confidence: {{ rec.confidence_level|floatformat:0 }}%</span>
+                        <span class="badge bg-light text-dark">{{ rec.get_risk_level_display }}</span>
+                    </div>
+                    {% if rec.target_price %}
+                    <div class="small text-success mt-1">
+                        Target: ₹{{ rec.target_price }}
+                    </div>
+                    {% endif %}
+                </div>
+                {% empty %}
+                <div class="p-4 text-center text-muted">
+                    <i class="bi bi-lightbulb fs-3 mb-2 d-block"></i>
+                    <p class="small">No active recommendations</p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Portfolio Quick View -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-briefcase"></i> My Portfolio {% if portfolio.holdings_count %}({{ portfolio.holdings_count }} holdings){% endif %}</h5>
+                <a href="{% url 'portfolio:dashboard' %}" class="btn btn-sm btn-outline-primary">
+                    View Full Portfolio <i class="bi bi-arrow-right"></i>
+                </a>
+            </div>
+            <div class="card-body">
+                {% if portfolio and portfolio.holdings_count > 0 %}
+                <div class="row text-center">
+                    <div class="col-md-3">
+                        <div class="card bg-light border-0">
+                            <div class="card-body">
+                                <i class="bi bi-wallet2 text-primary fs-3"></i>
+                                <h4 class="mb-0 mt-2">₹{{ portfolio.total_investment|floatformat:2 }}</h4>
+                                <small class="text-muted">Total Investment</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-light border-0">
+                            <div class="card-body">
+                                <i class="bi bi-graph-up text-success fs-3"></i>
+                                <h4 class="mb-0 mt-2">₹{{ portfolio.current_value|floatformat:2 }}</h4>
+                                <small class="text-muted">Current Value</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-light border-0">
+                            <div class="card-body">
+                                <i class="bi bi-currency-rupee {% if portfolio.total_pnl >= 0 %}text-success{% else %}text-danger{% endif %} fs-3"></i>
+                                <h4 class="mb-0 mt-2 {% if portfolio.total_pnl >= 0 %}text-success{% else %}text-danger{% endif %}">₹{{ portfolio.total_pnl|floatformat:2 }}</h4>
+                                <small class="text-muted">Total P&L</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-light border-0">
+                            <div class="card-body">
+                                <i class="bi bi-percent {% if portfolio.total_pnl_percent >= 0 %}text-success{% else %}text-danger{% endif %} fs-3"></i>
+                                <h4 class="mb-0 mt-2 {% if portfolio.total_pnl_percent >= 0 %}text-success{% else %}text-danger{% endif %}">{{ portfolio.total_pnl_percent|floatformat:2 }}%</h4>
+                                <small class="text-muted">Returns</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="text-center mt-3">
+                    <a href="{% url 'portfolio:dashboard' %}" class="btn btn-primary me-2">
+                        <i class="bi bi-briefcase"></i> Manage Portfolio
+                    </a>
+                    <a href="{% url 'portfolio:analytics' %}" class="btn btn-outline-secondary">
+                        <i class="bi bi-bar-chart"></i> View Analytics
+                    </a>
+                </div>
+                {% else %}
+                <div class="text-center py-4">
+                    <i class="bi bi-inbox fs-1 mb-3 d-block text-muted"></i>
+                    <h5>Your portfolio is empty</h5>
+                    <p class="text-muted">Start tracking your stock investments by importing your portfolio or adding holdings manually.</p>
+                    <div class="mt-3">
+                        <a href="{% url 'portfolio:import_portfolio' %}" class="btn btn-primary me-2">
+                            <i class="bi bi-upload"></i> Import Portfolio
+                        </a>
+                        <a href="{% url 'portfolio:dashboard' %}" class="btn btn-outline-secondary">
+                            <i class="bi bi-plus-circle"></i> Add Holding
+                        </a>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Market Session Info -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-info-circle"></i> Today's Market Session</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3 text-center">
+                        <h6>News Collection</h6>
+                        {% if market_session.news_collection_completed %}
+                        <span class="badge bg-success">Completed</span>
+                        <br><small class="text-muted">
+                            {{ market_session.news_collection_completed|time }}
+                        </small>
+                        {% else %}
+                        <span class="badge bg-warning">In Progress</span>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="col-md-3 text-center">
+                        <h6>AI Analysis</h6>
+                        {% if market_session.analysis_completed %}
+                        <span class="badge bg-success">Completed</span>
+                        <br><small class="text-muted">
+                            {{ market_session.analysis_completed|time }}
+                        </small>
+                        {% else %}
+                        <span class="badge bg-warning">In Progress</span>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="col-md-3 text-center">
+                        <h6>Recommendations</h6>
+                        {% if market_session.recommendations_generated %}
+                        <span class="badge bg-success">Generated</span>
+                        <br><small class="text-muted">
+                            {{ market_session.total_recommendations }} recommendations
+                        </small>
+                        {% else %}
+                        <span class="badge bg-warning">Pending</span>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="col-md-3 text-center">
+                        <h6>Market Status</h6>
+                        <span class="badge bg-info">Pre-Market</span>
+                        <br><small class="text-muted">
+                            Opens at 9:15 AM IST
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Update sentiment counts
+{% for item in sentiment_stats %}
+    {% if item.sentiment == 'POSITIVE' %}
+        document.getElementById('positive-count').textContent = '{{ item.count }}';
+    {% elif item.sentiment == 'NEGATIVE' %}
+        document.getElementById('negative-count').textContent = '{{ item.count }}';
+    {% endif %}
+{% endfor %}
+
+// Sentiment Distribution Chart
+const sentimentCtx = document.getElementById('sentimentChart').getContext('2d');
+const sentimentData = {
+    {% for item in sentiment_stats %}
+        '{{ item.sentiment }}': {{ item.count }}{% if not forloop.last %},{% endif %}
+    {% endfor %}
+};
+
+new Chart(sentimentCtx, {
+    type: 'doughnut',
+    data: {
+        labels: ['Positive', 'Negative', 'Neutral'],
+        datasets: [{
+            data: [
+                sentimentData['POSITIVE'] || 0,
+                sentimentData['NEGATIVE'] || 0,
+                sentimentData['NEUTRAL'] || 0
+            ],
+            backgroundColor: [
+                '#28a745',
+                '#dc3545',
+                '#6c757d'
+            ]
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                position: 'bottom'
+            }
+        }
+    }
+});
+
+// Category Distribution Chart
+const categoryCtx = document.getElementById('categoryChart').getContext('2d');
+const categoryLabels = [
+    {% for item in category_stats %}
+        '{{ item.category__name }}'{% if not forloop.last %},{% endif %}
+    {% endfor %}
+];
+const categoryData = [
+    {% for item in category_stats %}
+        {{ item.count }}{% if not forloop.last %},{% endif %}
+    {% endfor %}
+];
+
+new Chart(categoryCtx, {
+    type: 'bar',
+    data: {
+        labels: categoryLabels,
+        datasets: [{
+            label: 'News Count',
+            data: categoryData,
+            backgroundColor: '#007bff'
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+            y: {
+                beginAtZero: true
+            }
+        },
+        plugins: {
+            legend: {
+                display: false
+            }
+        }
+    }
+});
+
+// Auto-refresh function
+function updateCharts() {
+    location.reload();
+}
+</script>
+{% endblock %}

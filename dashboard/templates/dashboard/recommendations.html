@@ -1,0 +1,165 @@
+{% extends 'dashboard/base.html' %}
+
+{% block title %}Recommendations - Stock News AI{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h2><i class="bi bi-lightbulb"></i> Stock Recommendations</h2>
+        <p class="text-muted">AI-powered stock recommendations based on market news analysis</p>
+    </div>
+</div>
+
+<!-- Stats Cards -->
+<div class="row mb-4">
+    {% for stat in rec_stats %}
+    <div class="col-md-3 mb-3">
+        <div class="card">
+            <div class="card-body text-center">
+                <h3 class="mb-0">{{ stat.count }}</h3>
+                <p class="mb-0 text-muted">{{ stat.recommendation|upper }}</p>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Filters Section -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <form method="get" class="row g-3">
+                    <div class="col-md-3">
+                        <label class="form-label">Recommendation Type</label>
+                        <select name="type" class="form-select">
+                            <option value="">All Types</option>
+                            <option value="buy" {% if current_filters.type == 'buy' %}selected{% endif %}>Buy</option>
+                            <option value="sell" {% if current_filters.type == 'sell' %}selected{% endif %}>Sell</option>
+                            <option value="hold" {% if current_filters.type == 'hold' %}selected{% endif %}>Hold</option>
+                            <option value="watch" {% if current_filters.type == 'watch' %}selected{% endif %}>Watch</option>
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-3">
+                        <label class="form-label">Risk Level</label>
+                        <select name="risk" class="form-select">
+                            <option value="">All Risk Levels</option>
+                            <option value="low" {% if current_filters.risk == 'low' %}selected{% endif %}>Low</option>
+                            <option value="medium" {% if current_filters.risk == 'medium' %}selected{% endif %}>Medium</option>
+                            <option value="high" {% if current_filters.risk == 'high' %}selected{% endif %}>High</option>
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <label class="form-label">Search Stock</label>
+                        <input type="text" name="stock" class="form-control" placeholder="Symbol or Company name" value="{{ current_filters.stock }}">
+                    </div>
+                    
+                    <div class="col-md-2">
+                        <label class="form-label">&nbsp;</label>
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-funnel"></i> Filter
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recommendations List -->
+<div class="row">
+    <div class="col-12">
+        {% if page_obj %}
+            {% for rec in page_obj %}
+            <div class="card mb-3">
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <h5 class="card-title mb-0">
+                                    {{ rec.stock.symbol }} - {{ rec.stock.company_name }}
+                                </h5>
+                                <span class="badge recommendation-{{ rec.recommendation|lower }}">
+                                    {{ rec.recommendation|upper }}
+                                </span>
+                            </div>
+                            
+                            <p class="card-text mb-2">{{ rec.reasoning }}</p>
+                            
+                            <div class="small text-muted">
+                                <span class="me-3">
+                                    <i class="bi bi-calendar"></i> Valid until: {{ rec.valid_until|date:"M d, Y" }}
+                                </span>
+                                <span class="badge {% if rec.risk_level == 'high' %}bg-danger{% elif rec.risk_level == 'medium' %}bg-warning{% else %}bg-success{% endif %}">
+                                    {{ rec.risk_level|upper }} Risk
+                                </span>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-4">
+                            <div class="row text-center">
+                                <div class="col-6">
+                                    <div class="card bg-light">
+                                        <div class="card-body p-2">
+                                            <small class="text-muted d-block">Target Price</small>
+                                            <strong>₹{{ rec.target_price }}</strong>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="card bg-light">
+                                        <div class="card-body p-2">
+                                            <small class="text-muted d-block">Confidence</small>
+                                            <strong>{{ rec.confidence_level }}%</strong>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            {% if rec.stop_loss %}
+                            <div class="mt-2 text-center">
+                                <small class="text-muted">Stop Loss: ₹{{ rec.stop_loss }}</small>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+            
+            <!-- Pagination -->
+            {% if page_obj.has_other_pages %}
+            <nav class="mt-4">
+                <ul class="pagination justify-content-center">
+                    {% if page_obj.has_previous %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if current_filters.type %}&type={{ current_filters.type }}{% endif %}{% if current_filters.risk %}&risk={{ current_filters.risk }}{% endif %}{% if current_filters.stock %}&stock={{ current_filters.stock }}{% endif %}">Previous</a>
+                    </li>
+                    {% endif %}
+                    
+                    <li class="page-item active">
+                        <span class="page-link">
+                            Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+                        </span>
+                    </li>
+                    
+                    {% if page_obj.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if current_filters.type %}&type={{ current_filters.type }}{% endif %}{% if current_filters.risk %}&risk={{ current_filters.risk }}{% endif %}{% if current_filters.stock %}&stock={{ current_filters.stock }}{% endif %}">Next</a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </nav>
+            {% endif %}
+        {% else %}
+            <div class="alert alert-info">
+                <i class="bi bi-info-circle"></i> No active recommendations found matching your filters.
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

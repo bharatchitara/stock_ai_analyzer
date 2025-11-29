@@ -1,0 +1,161 @@
+{% extends 'dashboard/base.html' %}
+{% load static %}
+
+{% block title %}Import Summary - Stock Market News AI{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header pb-0">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div>
+                            <h5 class="mb-0">Portfolio Import Summary</h5>
+                            <p class="text-sm mb-0">Review the results of your portfolio import</p>
+                        </div>
+                        <a href="{% url 'portfolio:dashboard' %}" class="btn btn-primary btn-sm">
+                            <i class="fas fa-chart-line me-1"></i> View Portfolio
+                        </a>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <!-- Summary Statistics -->
+                    <div class="row mb-4">
+                        <div class="col-md-3">
+                            <div class="card bg-gradient-success">
+                                <div class="card-body p-3 text-white">
+                                    <div class="d-flex">
+                                        <div class="icon icon-shape bg-white shadow text-center border-radius-md">
+                                            <i class="fas fa-check text-success text-lg opacity-10"></i>
+                                        </div>
+                                        <div class="ms-3">
+                                            <p class="text-sm mb-0 text-capitalize font-weight-bold opacity-7">Success</p>
+                                            <h5 class="font-weight-bolder mb-0">{{ summary.success_count|default:0 }}</h5>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-3">
+                            <div class="card bg-gradient-warning">
+                                <div class="card-body p-3 text-white">
+                                    <div class="d-flex">
+                                        <div class="icon icon-shape bg-white shadow text-center border-radius-md">
+                                            <i class="fas fa-exclamation text-warning text-lg opacity-10"></i>
+                                        </div>
+                                        <div class="ms-3">
+                                            <p class="text-sm mb-0 text-capitalize font-weight-bold opacity-7">Skipped</p>
+                                            <h5 class="font-weight-bolder mb-0">{{ summary.skip_count|default:0 }}</h5>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-3">
+                            <div class="card bg-gradient-danger">
+                                <div class="card-body p-3 text-white">
+                                    <div class="d-flex">
+                                        <div class="icon icon-shape bg-white shadow text-center border-radius-md">
+                                            <i class="fas fa-times text-danger text-lg opacity-10"></i>
+                                        </div>
+                                        <div class="ms-3">
+                                            <p class="text-sm mb-0 text-capitalize font-weight-bold opacity-7">Errors</p>
+                                            <h5 class="font-weight-bolder mb-0">{{ summary.error_count|default:0 }}</h5>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-3">
+                            <div class="card bg-gradient-info">
+                                <div class="card-body p-3 text-white">
+                                    <div class="d-flex">
+                                        <div class="icon icon-shape bg-white shadow text-center border-radius-md">
+                                            <i class="fas fa-info text-info text-lg opacity-10"></i>
+                                        </div>
+                                        <div class="ms-3">
+                                            <p class="text-sm mb-0 text-capitalize font-weight-bold opacity-7">Warnings</p>
+                                            <h5 class="font-weight-bolder mb-0">{{ summary.warning_count|default:0 }}</h5>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Warnings -->
+                    {% if summary.warnings %}
+                    <div class="alert alert-warning">
+                        <h6 class="alert-heading">
+                            <i class="fas fa-exclamation-triangle me-2"></i>Warnings ({{ summary.warnings|length }})
+                        </h6>
+                        <ul class="mb-0">
+                            {% for warning in summary.warnings %}
+                            <li>{{ warning }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% endif %}
+
+                    <!-- Errors -->
+                    {% if summary.errors %}
+                    <div class="alert alert-danger">
+                        <h6 class="alert-heading">
+                            <i class="fas fa-times-circle me-2"></i>Errors ({{ summary.errors|length }})
+                        </h6>
+                        <ul class="mb-0">
+                            {% for error in summary.errors %}
+                            <li>{{ error }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% endif %}
+
+                    <!-- Success Message -->
+                    {% if summary.success_count > 0 %}
+                    <div class="alert alert-success">
+                        <i class="fas fa-check-circle me-2"></i>
+                        <strong>Import completed successfully!</strong> 
+                        {{ summary.success_count }} holding(s) have been imported to your portfolio.
+                        {% if summary.skip_count > 0 %}
+                        <br><small>Note: {{ summary.skip_count }} item(s) were skipped because the stocks were not found in our database.</small>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+
+                    <!-- Next Steps -->
+                    <div class="card bg-light mt-4">
+                        <div class="card-body">
+                            <h6 class="mb-3">
+                                <i class="fas fa-arrow-right text-primary me-2"></i>What's Next?
+                            </h6>
+                            <ul class="mb-0">
+                                <li>View your imported holdings in the <a href="{% url 'portfolio:dashboard' %}">Portfolio Dashboard</a></li>
+                                <li>Check personalized AI recommendations for your stocks</li>
+                                <li>Track real-time P&L and get news alerts for your holdings</li>
+                                {% if summary.skip_count > 0 %}
+                                <li class="text-warning">Add missing stocks to the database via admin panel, then import again</li>
+                                {% endif %}
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="mt-4 d-flex gap-2">
+                        <a href="{% url 'portfolio:dashboard' %}" class="btn btn-primary">
+                            <i class="fas fa-chart-line me-2"></i>View Portfolio
+                        </a>
+                        <a href="{% url 'portfolio:import_portfolio' %}" class="btn btn-outline-secondary">
+                            <i class="fas fa-upload me-2"></i>Import More Holdings
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

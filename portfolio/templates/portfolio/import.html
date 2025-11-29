@@ -1,0 +1,416 @@
+{% extends 'dashboard/base.html' %}
+{% load static %}
+
+{% block title %}Import Portfolio - Stock Market News AI{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header pb-0">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div>
+                            <h5 class="mb-0">Import Portfolio</h5>
+                            <p class="text-sm mb-0">Quickly import your holdings from your broker or file</p>
+                        </div>
+                        <a href="{% url 'portfolio:dashboard' %}" class="btn btn-outline-primary btn-sm">
+                            <i class="fas fa-arrow-left me-1"></i> Back to Portfolio
+                        </a>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <!-- Import Method Selection -->
+                    <ul class="nav nav-tabs mb-4" id="importTab" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="file-tab" data-bs-toggle="tab" data-bs-target="#file-import" type="button" role="tab">
+                                <i class="fas fa-file-upload me-2"></i>File Upload (CSV/JSON)
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="image-tab" data-bs-toggle="tab" data-bs-target="#image-import" type="button" role="tab">
+                                <i class="fas fa-image me-2"></i>Screenshot/Image
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="broker-tab" data-bs-toggle="tab" data-bs-target="#broker-import" type="button" role="tab">
+                                <i class="fas fa-link me-2"></i>Broker API (Coming Soon)
+                            </button>
+                        </li>
+                    </ul>
+
+                    <div class="tab-content" id="importTabContent">
+                        <!-- File Upload Tab -->
+                        <div class="tab-pane fade show active" id="file-import" role="tabpanel">
+                            <div class="row">
+                                <div class="col-md-8">
+                                    <form method="post" enctype="multipart/form-data" id="fileImportForm">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="import_method" value="file">
+                                        
+                                        <div class="mb-4">
+                                            <label class="form-label">Select Broker Format</label>
+                                            <select class="form-select" name="broker" id="brokerSelect">
+                                                <option value="generic">Generic CSV</option>
+                                                <option value="zerodha">Zerodha</option>
+                                                <option value="groww">Groww</option>
+                                                <option value="upstox">Upstox</option>
+                                                <option value="angelone">Angel One</option>
+                                            </select>
+                                            <small class="text-muted">Select your broker for automatic column mapping</small>
+                                        </div>
+
+                                        <div class="mb-4">
+                                            <label class="form-label">Upload Portfolio File</label>
+                                            <input type="file" class="form-control" name="portfolio_file" id="portfolioFile" accept=".csv,.json" required>
+                                            <small class="text-muted">Accepted formats: CSV, JSON</small>
+                                        </div>
+
+                                        <div class="mb-4">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" name="replace_existing" id="replaceExisting" checked>
+                                                <label class="form-check-label" for="replaceExisting">
+                                                    Replace all existing holdings (recommended)
+                                                </label>
+                                            </div>
+                                            <small class="text-muted d-block ms-4">
+                                                If unchecked, new holdings will be added to existing ones
+                                            </small>
+                                        </div>
+
+                                        <div class="alert alert-info">
+                                            <i class="fas fa-info-circle me-2"></i>
+                                            <strong>Important:</strong> Make sure your file includes columns for:
+                                            <ul class="mb-0 mt-2">
+                                                <li>Stock Symbol (e.g., RELIANCE, TCS)</li>
+                                                <li>Quantity</li>
+                                                <li>Average Price</li>
+                                                <li>Purchase Date (optional)</li>
+                                            </ul>
+                                        </div>
+
+                                        <div class="d-flex gap-2">
+                                            <button type="submit" class="btn btn-primary">
+                                                <i class="fas fa-upload me-2"></i>Import Portfolio
+                                            </button>
+                                            <a href="{% url 'portfolio:download_sample_csv' %}" class="btn btn-outline-secondary">
+                                                <i class="fas fa-download me-2"></i>Download Sample CSV
+                                            </a>
+                                        </div>
+                                    </form>
+                                </div>
+
+                                <div class="col-md-4">
+                                    <div class="card bg-light">
+                                        <div class="card-body">
+                                            <h6 class="mb-3">
+                                                <i class="fas fa-question-circle text-primary me-2"></i>How to Export from Your Broker
+                                            </h6>
+                                            
+                                            <div class="mb-3">
+                                                <strong>Zerodha:</strong>
+                                                <small class="d-block text-muted">Console → Holdings → Export CSV</small>
+                                            </div>
+                                            
+                                            <div class="mb-3">
+                                                <strong>Groww:</strong>
+                                                <small class="d-block text-muted">Portfolio → Holdings → Download</small>
+                                            </div>
+                                            
+                                            <div class="mb-3">
+                                                <strong>Upstox:</strong>
+                                                <small class="d-block text-muted">Holdings → Export to Excel</small>
+                                            </div>
+                                            
+                                            <div class="mb-3">
+                                                <strong>Angel One:</strong>
+                                                <small class="d-block text-muted">Portfolio → Download Holdings</small>
+                                            </div>
+
+                                            <div class="alert alert-warning mb-0">
+                                                <small>
+                                                    <i class="fas fa-exclamation-triangle me-1"></i>
+                                                    Stocks must exist in our database. Check the Stock list in admin panel.
+                                                </small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Image/Screenshot Upload Tab -->
+                        <div class="tab-pane fade" id="image-import" role="tabpanel">
+                            <div class="row">
+                                <div class="col-md-8">
+                                    <form method="post" enctype="multipart/form-data" id="imageImportForm">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="import_method" value="image">
+                                        
+                                        <div class="alert alert-info mb-4">
+                                            <i class="fas fa-lightbulb me-2"></i>
+                                            <strong>Smart Image Import</strong><br>
+                                            Upload a screenshot of your portfolio from your broker app or website. 
+                                            Our AI will automatically extract stock symbols, quantities, and prices.
+                                        </div>
+
+                                        <div class="mb-4">
+                                            <label class="form-label">Upload Portfolio Screenshot</label>
+                                            <div class="border-2 border-dashed rounded p-4 text-center" id="imageDropZone" style="border-color: #dee2e6; cursor: pointer;">
+                                                <input type="file" class="form-control d-none" name="portfolio_image" id="portfolioImage" accept="image/*" required>
+                                                <div id="imagePreview" class="d-none mb-3">
+                                                    <img id="previewImg" src="" alt="Preview" style="max-width: 100%; max-height: 400px;" class="rounded">
+                                                </div>
+                                                <div id="uploadPrompt">
+                                                    <i class="fas fa-cloud-upload-alt fa-3x text-muted mb-3"></i>
+                                                    <p class="mb-2">Click to upload or drag and drop</p>
+                                                    <small class="text-muted">PNG, JPG, JPEG (Max 10MB)</small>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="form-check mb-3">
+                                            <input class="form-check-input" type="checkbox" name="use_ai_extraction" id="useAI" checked>
+                                            <label class="form-check-label" for="useAI">
+                                                Use AI-powered extraction (More accurate)
+                                            </label>
+                                            <br>
+                                            <small class="text-muted">If unchecked, basic OCR will be used (requires pytesseract)</small>
+                                        </div>
+
+                                        <div class="form-check mb-4">
+                                            <input class="form-check-input" type="checkbox" name="replace_existing" id="replaceExistingImage" checked>
+                                            <label class="form-check-label" for="replaceExistingImage">
+                                                Replace all existing holdings (recommended)
+                                            </label>
+                                            <br>
+                                            <small class="text-muted">If unchecked, new holdings will be added to existing ones</small>
+                                        </div>
+
+                                        <div class="alert alert-warning">
+                                            <i class="fas fa-exclamation-triangle me-2"></i>
+                                            <strong>Tips for best results:</strong>
+                                            <ul class="mb-0 mt-2">
+                                                <li>Take a clear, high-resolution screenshot</li>
+                                                <li>Ensure text is readable and not blurry</li>
+                                                <li>Include stock symbols, quantities, and prices in the screenshot</li>
+                                                <li>Remove any overlays or popups from the screenshot</li>
+                                                <li>Works with Zerodha, Groww, Upstox, Angel One, and other brokers</li>
+                                            </ul>
+                                        </div>
+
+                                        <div class="d-flex gap-2">
+                                            <button type="submit" class="btn btn-primary" id="imageSubmitBtn" disabled>
+                                                <i class="fas fa-magic me-2"></i>Extract & Import Holdings
+                                            </button>
+                                            <button type="button" class="btn btn-outline-secondary" onclick="document.getElementById('portfolioImage').value=''; document.getElementById('imagePreview').classList.add('d-none'); document.getElementById('uploadPrompt').classList.remove('d-none'); document.getElementById('imageSubmitBtn').disabled=true;">
+                                                <i class="fas fa-times me-2"></i>Clear
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+
+                                <div class="col-md-4">
+                                    <div class="card bg-light">
+                                        <div class="card-body">
+                                            <h6 class="mb-3">
+                                                <i class="fas fa-mobile-alt text-primary me-2"></i>How to Take Screenshots
+                                            </h6>
+                                            
+                                            <div class="mb-3">
+                                                <strong>Zerodha Kite:</strong>
+                                                <small class="d-block text-muted">Go to Holdings → Screenshot the entire holdings list</small>
+                                            </div>
+                                            
+                                            <div class="mb-3">
+                                                <strong>Groww:</strong>
+                                                <small class="d-block text-muted">Portfolio → Stocks → Screenshot holdings</small>
+                                            </div>
+                                            
+                                            <div class="mb-3">
+                                                <strong>Upstox:</strong>
+                                                <small class="d-block text-muted">Portfolio → Holdings → Screenshot</small>
+                                            </div>
+                                            
+                                            <div class="mb-3">
+                                                <strong>Angel One:</strong>
+                                                <small class="d-block text-muted">Portfolio → Screenshot holdings tab</small>
+                                            </div>
+
+                                            <div class="alert alert-success mb-0">
+                                                <small>
+                                                    <i class="fas fa-check-circle me-1"></i>
+                                                    <strong>Privacy:</strong> Your images are processed securely and deleted immediately after extraction.
+                                                </small>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="card bg-gradient-primary mt-3">
+                                        <div class="card-body text-white">
+                                            <h6 class="mb-2 text-white">
+                                                <i class="fas fa-robot me-2"></i>AI-Powered
+                                            </h6>
+                                            <p class="text-sm mb-0 opacity-8">
+                                                Our AI can recognize stock holdings from various broker apps and websites, 
+                                                automatically extracting symbols, quantities, and prices with high accuracy.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Broker API Tab -->
+                        <div class="tab-pane fade" id="broker-import" role="tabpanel">
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle me-2"></i>
+                                <strong>Coming Soon!</strong> Direct broker API integration is under development.
+                            </div>
+                            
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <h6 class="mb-3">Supported Brokers (Upcoming)</h6>
+                                    <ul class="list-group">
+                                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                                            <span><i class="fas fa-chart-line text-primary me-2"></i>Zerodha Kite</span>
+                                            <span class="badge bg-warning">Soon</span>
+                                        </li>
+                                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                                            <span><i class="fas fa-chart-line text-success me-2"></i>Groww</span>
+                                            <span class="badge bg-warning">Soon</span>
+                                        </li>
+                                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                                            <span><i class="fas fa-chart-line text-info me-2"></i>Upstox</span>
+                                            <span class="badge bg-warning">Soon</span>
+                                        </li>
+                                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                                            <span><i class="fas fa-chart-line text-danger me-2"></i>Angel One</span>
+                                            <span class="badge bg-warning">Soon</span>
+                                        </li>
+                                    </ul>
+                                </div>
+                                
+                                <div class="col-md-6">
+                                    <div class="card bg-light">
+                                        <div class="card-body">
+                                            <h6 class="mb-3">Benefits of API Integration</h6>
+                                            <ul class="mb-0">
+                                                <li>Real-time portfolio sync</li>
+                                                <li>Automatic price updates</li>
+                                                <li>Live P&L tracking</li>
+                                                <li>No manual file uploads</li>
+                                                <li>Secure OAuth authentication</li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="mt-4">
+                                <p class="text-muted mb-0">
+                                    <i class="fas fa-lightbulb me-2"></i>
+                                    <strong>Tip:</strong> For now, use the File Upload method to import your holdings quickly.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// File upload form submission handler
+document.getElementById('fileImportForm').addEventListener('submit', function(e) {
+    const fileInput = document.getElementById('portfolioFile');
+    if (!fileInput.files.length) {
+        e.preventDefault();
+        alert('Please select a file to upload');
+        return false;
+    }
+    
+    // Show loading state
+    const submitBtn = this.querySelector('button[type="submit"]');
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Importing...';
+    submitBtn.disabled = true;
+});
+
+// Image upload handlers
+const imageInput = document.getElementById('portfolioImage');
+const imageDropZone = document.getElementById('imageDropZone');
+const imagePreview = document.getElementById('imagePreview');
+const previewImg = document.getElementById('previewImg');
+const uploadPrompt = document.getElementById('uploadPrompt');
+const imageSubmitBtn = document.getElementById('imageSubmitBtn');
+
+// Click to upload
+imageDropZone.addEventListener('click', function() {
+    imageInput.click();
+});
+
+// File input change
+imageInput.addEventListener('change', function(e) {
+    handleImageFile(this.files[0]);
+});
+
+// Drag and drop
+imageDropZone.addEventListener('dragover', function(e) {
+    e.preventDefault();
+    this.style.borderColor = '#0d6efd';
+    this.style.backgroundColor = '#f8f9fa';
+});
+
+imageDropZone.addEventListener('dragleave', function(e) {
+    e.preventDefault();
+    this.style.borderColor = '#dee2e6';
+    this.style.backgroundColor = 'transparent';
+});
+
+imageDropZone.addEventListener('drop', function(e) {
+    e.preventDefault();
+    this.style.borderColor = '#dee2e6';
+    this.style.backgroundColor = 'transparent';
+    
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+        imageInput.files = files;
+        handleImageFile(files[0]);
+    }
+});
+
+function handleImageFile(file) {
+    if (!file) return;
+    
+    // Validate file type
+    if (!file.type.match('image.*')) {
+        alert('Please upload an image file');
+        return;
+    }
+    
+    // Validate file size (10MB max)
+    if (file.size > 10 * 1024 * 1024) {
+        alert('File size must be less than 10MB');
+        return;
+    }
+    
+    // Show preview
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        previewImg.src = e.target.result;
+        imagePreview.classList.remove('d-none');
+        uploadPrompt.classList.add('d-none');
+        imageSubmitBtn.disabled = false;
+    };
+    reader.readAsDataURL(file);
+}
+
+// Image form submission
+document.getElementById('imageImportForm').addEventListener('submit', function(e) {
+    const submitBtn = document.getElementById('imageSubmitBtn');
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Processing Image...';
+    submitBtn.disabled = true;
+});
+</script>
+{% endblock %}
