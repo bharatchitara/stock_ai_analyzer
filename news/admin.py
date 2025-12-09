@@ -1,9 +1,23 @@
 from django.contrib import admin
 from .models import (
-    NewsSource, Category, Stock, NewsArticle, 
+    AIConfig, NewsSource, Category, Stock, NewsArticle, 
     Recommendation, UserWatchlist, MarketSession,
     UserPortfolio, PortfolioHolding, PersonalizedRecommendation
 )
+
+
+@admin.register(AIConfig)
+class AIConfigAdmin(admin.ModelAdmin):
+    list_display = ['name', 'gemini_model', 'openai_model', 'is_active', 'updated_at']
+    list_filter = ['is_active', 'updated_at']
+    search_fields = ['name', 'gemini_model', 'openai_model']
+    readonly_fields = ['created_at', 'updated_at']
+    
+    def save_model(self, request, obj, form, change):
+        # If setting this config as active, deactivate others
+        if obj.is_active:
+            AIConfig.objects.exclude(pk=obj.pk).update(is_active=False)
+        super().save_model(request, obj, form, change)
 
 
 @admin.register(NewsSource)

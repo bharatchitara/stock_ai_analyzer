@@ -38,6 +38,12 @@
                             <i class="fas fa-robot me-2"></i>AI Analysis
                         </button>
                     </form>
+                    <form method="POST" action="{% url 'portfolio:fetch_holdings_news' %}" style="display: inline;" id="fetchNewsForm">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-warning" id="fetchNewsBtn">
+                            <i class="fas fa-newspaper me-2"></i>Fetch News
+                        </button>
+                    </form>
                     <form method="POST" action="{% url 'portfolio:refresh_prices' %}" style="display: inline;">
                         {% csrf_token %}
                         <button type="submit" class="btn btn-success">
@@ -191,6 +197,21 @@
     </div>
     {% endif %}
 
+    <!-- Quick Info Banner -->
+    {% if holdings %}
+    <div class="row mb-3">
+        <div class="col-12">
+            <div class="alert alert-info alert-dismissible fade show" role="alert">
+                <span class="alert-icon"><i class="fas fa-info-circle"></i></span>
+                <span class="alert-text">
+                    <strong>Track Stock Events:</strong> Click the <i class="fas fa-calendar-alt mx-1"></i> icon next to any holding to view insider trades, bulk deals, corporate actions, and promoter holdings.
+                </span>
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Holdings Table -->
     <div class="row">
         <div class="col-12">
@@ -264,9 +285,14 @@
                                         </span>
                                     </td>
                                     <td class="align-middle">
-                                        <a href="{% url 'portfolio:holding_detail' holding.id %}" class="text-secondary font-weight-bold text-xs" data-toggle="tooltip" data-original-title="View details">
-                                            <i class="fas fa-eye"></i>
-                                        </a>
+                                        <div class="btn-group btn-group-sm" role="group">
+                                            <a href="{% url 'portfolio:holding_detail' holding.id %}" class="btn btn-link text-secondary font-weight-bold text-xs p-0 me-2" data-toggle="tooltip" title="View Details">
+                                                <i class="fas fa-eye"></i>
+                                            </a>
+                                            <a href="{% url 'portfolio:stock_events' holding.stock.symbol %}" class="btn btn-link text-info font-weight-bold text-xs p-0" data-toggle="tooltip" title="View Events">
+                                                <i class="fas fa-calendar-alt"></i>
+                                            </a>
+                                        </div>
                                     </td>
                                 </tr>
                                 {% endfor %}
@@ -310,5 +336,75 @@
         // Implement real-time price updates via AJAX
         console.log('Refreshing portfolio data...');
     }, 30000);
+
+    // Non-blocking news fetch with AJAX
+    document.getElementById('fetchNewsForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const btn = document.getElementById('fetchNewsBtn');
+        const originalHtml = btn.innerHTML;
+        
+        // Disable button and show loading state
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Fetching...';
+        
+        // Get CSRF token
+        const csrfToken = this.querySelector('[name=csrfmiddlewaretoken]').value;
+        
+        // Make AJAX request
+        fetch('{% url "portfolio:fetch_holdings_news" %}', {
+            method: 'POST',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRFToken': csrfToken,
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: new URLSearchParams({
+                'csrfmiddlewaretoken': csrfToken
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Show success message
+                const alertDiv = document.createElement('div');
+                alertDiv.className = 'alert alert-success alert-dismissible fade show position-fixed';
+                alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+                alertDiv.innerHTML = `
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    <strong>✅ Success!</strong> Fetched ${data.new_articles} new articles for ${data.stocks_processed} stocks.
+                    ${data.skipped_articles > 0 ? `<br><small>Skipped ${data.skipped_articles} existing articles.</small>` : ''}
+                `;
+                document.body.appendChild(alertDiv);
+                
+                // Auto-remove after 5 seconds
+                setTimeout(() => {
+                    alertDiv.remove();
+                }, 5000);
+            } else {
+                throw new Error(data.error || 'Unknown error');
+            }
+        })
+        .catch(error => {
+            // Show error message
+            const alertDiv = document.createElement('div');
+            alertDiv.className = 'alert alert-danger alert-dismissible fade show position-fixed';
+            alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+            alertDiv.innerHTML = `
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                <strong>❌ Error!</strong> ${error.message}
+            `;
+            document.body.appendChild(alertDiv);
+            
+            setTimeout(() => {
+                alertDiv.remove();
+            }, 5000);
+        })
+        .finally(() => {
+            // Re-enable button
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+        });
+    });
 </script>
 {% endblock %}

@@ -184,6 +184,27 @@
     </div>
     {% endif %}
 
+    <!-- Stock Events Section -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card bg-gradient-info">
+                <div class="card-body text-white">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h5 class="text-white mb-2">
+                                <i class="fas fa-chart-line me-2"></i>Track Stock Events
+                            </h5>
+                            <p class="mb-0 opacity-8">View insider trades, bulk deals, corporate actions, and promoter holdings</p>
+                        </div>
+                        <a href="{% url 'portfolio:stock_events' holding.stock.symbol %}" class="btn btn-white">
+                            <i class="fas fa-calendar-alt me-2"></i>View All Events
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Action Buttons -->
     <div class="row mt-4">
         <div class="col-12">
@@ -192,6 +213,9 @@
             </a>
             <a href="{% url 'portfolio:remove_holding' holding.id %}" class="btn btn-danger" onclick="return confirm('Are you sure you want to remove this holding?')">
                 <i class="fas fa-trash me-2"></i>Remove Holding
+            </a>
+            <a href="{% url 'portfolio:stock_events' holding.stock.symbol %}" class="btn btn-info">
+                <i class="fas fa-calendar-alt me-2"></i>View Stock Events
             </a>
         </div>
     </div>

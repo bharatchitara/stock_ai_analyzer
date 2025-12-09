@@ -4,12 +4,6 @@ AI-powered news analysis and categorization module
 
 # Optional imports - system works without these
 try:
-    import openai
-    OPENAI_AVAILABLE = True
-except ImportError:
-    OPENAI_AVAILABLE = False
-
-try:
     from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
     TRANSFORMERS_AVAILABLE = True
 except ImportError:
@@ -28,19 +22,12 @@ class NewsAnalyzer:
     """AI-powered news analysis for sentiment, categorization, and impact assessment"""
     
     def __init__(self):
-        self.openai_client = None
         self.sentiment_analyzer = None
         self.setup_ai_models()
     
     def setup_ai_models(self):
         """Initialize AI models"""
         try:
-            # Setup OpenAI
-            if OPENAI_AVAILABLE and hasattr(settings, 'OPENAI_API_KEY') and settings.OPENAI_API_KEY:
-                openai.api_key = settings.OPENAI_API_KEY
-                self.openai_client = openai
-                logger.info("OpenAI client initialized")
-            
             # Setup local sentiment analysis model (optional)
             if TRANSFORMERS_AVAILABLE:
                 try:
@@ -82,12 +69,8 @@ class NewsAnalyzer:
                 
                 return sentiment, score
             
-            elif self.openai_client:
-                # Use OpenAI as fallback
-                return self._analyze_sentiment_openai(text)
-            
             else:
-                # Use rule-based analysis as final fallback
+                # Use rule-based analysis as fallback
                 return self._analyze_sentiment_rules(text)
                 
         except Exception as e:
@@ -124,31 +107,7 @@ class NewsAnalyzer:
         else:
             return 'NEUTRAL', 0.5
 
-    def _analyze_sentiment_openai(self, text: str) -> Tuple[str, float]:
-        """Analyze sentiment using OpenAI"""
-        try:
-            prompt = f"""
-            Analyze the sentiment of this Indian stock market news article:
-            
-            "{text[:1000]}"
-            
-            Respond with only a JSON object:
-            {{"sentiment": "POSITIVE/NEGATIVE/NEUTRAL", "confidence": 0.0-1.0}}
-            """
-            
-            response = self.openai_client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=100,
-                temperature=0.1
-            )
-            
-            result = json.loads(response.choices[0].message.content.strip())
-            return result['sentiment'], result['confidence']
-            
-        except Exception as e:
-            logger.error(f"Error in OpenAI sentiment analysis: {str(e)}")
-            return 'NEUTRAL', 0.5
+
     
     def categorize_news(self, title: str, content: str) -> Tuple[str, float]:
         """
@@ -183,48 +142,13 @@ class NewsAnalyzer:
                 best_category = max(category_scores.items(), key=lambda x: x[1])
                 return best_category[0], min(best_category[1] * 2, 1.0)  # Scale confidence
             
-            # Use OpenAI for complex categorization
-            if self.openai_client:
-                return self._categorize_news_openai(title, content)
-            
             return 'OTHER', 0.5
             
         except Exception as e:
             logger.error(f"Error in news categorization: {str(e)}")
             return 'OTHER', 0.5
     
-    def _categorize_news_openai(self, title: str, content: str) -> Tuple[str, float]:
-        """Categorize news using OpenAI"""
-        try:
-            categories = [
-                'MARKET_OPEN', 'EARNINGS', 'POLICY', 'GLOBAL', 'SECTOR', 
-                'IPO', 'MERGER', 'COMMODITY', 'CURRENCY', 'REGULATORY', 'OTHER'
-            ]
-            
-            prompt = f"""
-            Categorize this Indian stock market news article into one of these categories:
-            {', '.join(categories)}
-            
-            Title: "{title}"
-            Content: "{content[:500]}"
-            
-            Respond with only a JSON object:
-            {{"category": "CATEGORY_NAME", "confidence": 0.0-1.0}}
-            """
-            
-            response = self.openai_client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=100,
-                temperature=0.1
-            )
-            
-            result = json.loads(response.choices[0].message.content.strip())
-            return result['category'], result['confidence']
-            
-        except Exception as e:
-            logger.error(f"Error in OpenAI categorization: {str(e)}")
-            return 'OTHER', 0.5
+
     
     def assess_impact_level(self, title: str, content: str, mentioned_stocks: List[str]) -> Tuple[str, float]:
         """
@@ -281,31 +205,12 @@ class NewsAnalyzer:
     def generate_summary(self, content: str) -> str:
         """Generate a concise summary of the news article"""
         try:
-            if self.openai_client and len(content) > 200:
-                prompt = f"""
-                Summarize this Indian stock market news article in 2-3 sentences:
-                
-                "{content[:1000]}"
-                
-                Focus on the key financial implications and market impact.
-                """
-                
-                response = self.openai_client.chat.completions.create(
-                    model="gpt-3.5-turbo",
-                    messages=[{"role": "user", "content": prompt}],
-                    max_tokens=150,
-                    temperature=0.3
-                )
-                
-                return response.choices[0].message.content.strip()
-            
+            # Simple extractive summary - first two sentences
+            sentences = content.split('. ')
+            if len(sentences) >= 2:
+                return '. '.join(sentences[:2]) + '.'
             else:
-                # Simple extractive summary - first two sentences
-                sentences = content.split('. ')
-                if len(sentences) >= 2:
-                    return '. '.join(sentences[:2]) + '.'
-                else:
-                    return content[:200] + '...'
+                return content[:200] + '...'
                     
         except Exception as e:
             logger.error(f"Error in summary generation: {str(e)}")

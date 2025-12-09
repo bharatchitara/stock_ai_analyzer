@@ -9,6 +9,23 @@ cd "$SCRIPT_DIR"
 # Activate virtual environment
 source venv/bin/activate
 
+# Function to check and kill Django server
+kill_django_server() {
+    echo "🔍 Checking for existing Django server..."
+    # Check common Django ports: 8000, 9000, 9150
+    for port in 8000 9000 9150; do
+        PIDS=$(lsof -ti:$port 2>/dev/null)
+        if [ ! -z "$PIDS" ]; then
+            echo "🛑 Found Django server on port $port. Stopping..."
+            kill -9 $PIDS 2>/dev/null
+        fi
+    done
+    sleep 2
+}
+
+# Kill existing Django server
+kill_django_server
+
 # Start Redis (if not running)
 if ! pgrep -x "redis-server" > /dev/null; then
     redis-server &

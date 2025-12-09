@@ -1,0 +1,385 @@
+{% extends "dashboard/base.html" %}
+{% load static %}
+{% load humanize %}
+
+{% block title %}{{ stock.symbol }} - Stock Events{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Stock Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h2 class="mb-1">{{ stock.symbol }}</h2>
+                            <p class="text-muted mb-0">{{ stock.company_name }}</p>
+                            <span class="badge bg-info">{{ stock.sector }}</span>
+                        </div>
+                        <div class="text-end">
+                            {% if stock.current_price %}
+                                <h3 class="mb-0">₹{{ stock.current_price|floatformat:2 }}</h3>
+                                <small class="text-muted">{{ stock.price_updated_at|date:"d M Y H:i" }}</small>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <button class="btn btn-primary btn-sm" onclick="refreshEvents()">
+                            <i class="fas fa-sync"></i> Refresh Events
+                        </button>
+                        <a href="{% url 'portfolio:dashboard' %}" class="btn btn-outline-secondary btn-sm">
+                            <i class="fas fa-arrow-left"></i> Back to Portfolio
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabs for different event types -->
+    <ul class="nav nav-tabs mb-3" id="eventTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="promoter-tab" data-bs-toggle="tab" data-bs-target="#promoter" type="button">
+                <i class="fas fa-users"></i> Promoter Holdings ({{ promoter_holdings.count }})
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="insider-tab" data-bs-toggle="tab" data-bs-target="#insider" type="button">
+                <i class="fas fa-user-tie"></i> Insider Trades ({{ insider_trades.count }})
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="bulk-tab" data-bs-toggle="tab" data-bs-target="#bulk" type="button">
+                <i class="fas fa-exchange-alt"></i> Bulk Deals ({{ bulk_deals.count }})
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="block-tab" data-bs-toggle="tab" data-bs-target="#block" type="button">
+                <i class="fas fa-cubes"></i> Block Deals ({{ block_deals.count }})
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="corporate-tab" data-bs-toggle="tab" data-bs-target="#corporate" type="button">
+                <i class="fas fa-building"></i> Corporate Actions ({{ corporate_actions.count }})
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content" id="eventTabsContent">
+        <!-- Promoter Holdings Tab -->
+        <div class="tab-pane fade show active" id="promoter" role="tabpanel">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Promoter Shareholding Pattern</h5>
+                </div>
+                <div class="card-body">
+                    {% if promoter_holdings %}
+                        <div class="alert alert-info mb-3">
+                            <strong>Latest Quarter:</strong> 
+                            Promoter Holding: <strong>{{ promoter_holdings.0.promoter_holding }}%</strong>
+                            {% if promoter_change != 0 %}
+                                <span class="badge {% if promoter_change > 0 %}bg-success{% else %}bg-danger{% endif %}">
+                                    {% if promoter_change > 0 %}+{% endif %}{{ promoter_change|floatformat:2 }}%
+                                </span>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Quarter End</th>
+                                        <th>Promoter %</th>
+                                        <th>Pledged %</th>
+                                        <th>Public %</th>
+                                        <th>FII %</th>
+                                        <th>DII %</th>
+                                        <th>QoQ Change</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for holding in promoter_holdings %}
+                                    <tr>
+                                        <td>{{ holding.quarter_end_date|date:"M Y" }}</td>
+                                        <td><strong>{{ holding.promoter_holding }}%</strong></td>
+                                        <td>
+                                            {% if holding.promoter_pledged > 0 %}
+                                                <span class="text-warning">{{ holding.promoter_pledged }}%</span>
+                                            {% else %}
+                                                {{ holding.promoter_pledged }}%
+                                            {% endif %}
+                                        </td>
+                                        <td>{{ holding.public_holding }}%</td>
+                                        <td>{{ holding.fii_holding|default:"-" }}{% if holding.fii_holding %}%{% endif %}</td>
+                                        <td>{{ holding.dii_holding|default:"-" }}{% if holding.dii_holding %}%{% endif %}</td>
+                                        <td>
+                                            {% with change=holding.promoter_change %}
+                                                {% if change > 0 %}
+                                                    <span class="text-success">+{{ change|floatformat:2 }}%</span>
+                                                {% elif change < 0 %}
+                                                    <span class="text-danger">{{ change|floatformat:2 }}%</span>
+                                                {% else %}
+                                                    <span class="text-muted">-</span>
+                                                {% endif %}
+                                            {% endwith %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <p class="text-muted">No promoter holding data available.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Insider Trades Tab -->
+        <div class="tab-pane fade" id="insider" role="tabpanel">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Insider Trading Activity</h5>
+                </div>
+                <div class="card-body">
+                    {% if insider_trades %}
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Insider Name</th>
+                                        <th>Designation</th>
+                                        <th>Type</th>
+                                        <th>Quantity</th>
+                                        <th>Value</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for trade in insider_trades %}
+                                    <tr>
+                                        <td>{{ trade.transaction_date|date:"d M Y" }}</td>
+                                        <td><strong>{{ trade.insider_name }}</strong></td>
+                                        <td><small class="text-muted">{{ trade.insider_designation }}</small></td>
+                                        <td>
+                                            <span class="badge {% if trade.transaction_type == 'BUY' %}bg-success{% elif trade.transaction_type == 'SELL' %}bg-danger{% else %}bg-warning{% endif %}">
+                                                {{ trade.get_transaction_type_display }}
+                                            </span>
+                                        </td>
+                                        <td>{{ trade.quantity|intcomma }}</td>
+                                        <td>
+                                            {% if trade.total_value %}
+                                                ₹{{ trade.total_value|floatformat:0|intcomma }}
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <p class="text-muted">No insider trading data available.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Bulk Deals Tab -->
+        <div class="tab-pane fade" id="bulk" role="tabpanel">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Bulk Deals (>0.5% equity)</h5>
+                </div>
+                <div class="card-body">
+                    {% if bulk_deals %}
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Client Name</th>
+                                        <th>Type</th>
+                                        <th>Quantity</th>
+                                        <th>Price</th>
+                                        <th>Total Value</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for deal in bulk_deals %}
+                                    <tr>
+                                        <td>{{ deal.deal_date|date:"d M Y" }}</td>
+                                        <td><strong>{{ deal.client_name }}</strong></td>
+                                        <td>
+                                            <span class="badge {% if deal.deal_type == 'BUY' %}bg-success{% else %}bg-danger{% endif %}">
+                                                {{ deal.get_deal_type_display }}
+                                            </span>
+                                        </td>
+                                        <td>{{ deal.quantity|intcomma }}</td>
+                                        <td>₹{{ deal.price_per_share|floatformat:2 }}</td>
+                                        <td><strong>₹{{ deal.total_value|floatformat:0|intcomma }}</strong></td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <p class="text-muted">No bulk deals data available.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Block Deals Tab -->
+        <div class="tab-pane fade" id="block" role="tabpanel">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Block Deals (>10,000 shares)</h5>
+                </div>
+                <div class="card-body">
+                    {% if block_deals %}
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Client Name</th>
+                                        <th>Type</th>
+                                        <th>Quantity</th>
+                                        <th>Price</th>
+                                        <th>Total Value</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for deal in block_deals %}
+                                    <tr>
+                                        <td>{{ deal.deal_date|date:"d M Y" }}</td>
+                                        <td><strong>{{ deal.client_name }}</strong></td>
+                                        <td>
+                                            <span class="badge {% if deal.deal_type == 'BUY' %}bg-success{% else %}bg-danger{% endif %}">
+                                                {{ deal.get_deal_type_display }}
+                                            </span>
+                                        </td>
+                                        <td>{{ deal.quantity|intcomma }}</td>
+                                        <td>₹{{ deal.price_per_share|floatformat:2 }}</td>
+                                        <td><strong>₹{{ deal.total_value|floatformat:0|intcomma }}</strong></td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <p class="text-muted">No block deals data available.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Corporate Actions Tab -->
+        <div class="tab-pane fade" id="corporate" role="tabpanel">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Corporate Actions</h5>
+                </div>
+                <div class="card-body">
+                    {% if corporate_actions %}
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                        <th>Ex Date</th>
+                                        <th>Record Date</th>
+                                        <th>Details</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for action in corporate_actions %}
+                                    <tr>
+                                        <td>
+                                            <span class="badge bg-primary">{{ action.get_action_type_display }}</span>
+                                        </td>
+                                        <td>{{ action.description|truncatewords:10 }}</td>
+                                        <td>
+                                            {% if action.ex_date %}
+                                                {{ action.ex_date|date:"d M Y" }}
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if action.record_date %}
+                                                {{ action.record_date|date:"d M Y" }}
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if action.action_type == 'DIVIDEND' and action.dividend_amount %}
+                                                <strong>₹{{ action.dividend_amount }}</strong> per share
+                                            {% elif action.action_type == 'BONUS' and action.bonus_ratio %}
+                                                Ratio: <strong>{{ action.bonus_ratio }}</strong>
+                                            {% elif action.action_type == 'SPLIT' and action.split_ratio %}
+                                                Ratio: <strong>{{ action.split_ratio }}</strong>
+                                            {% elif action.action_type == 'RIGHTS' and action.rights_ratio %}
+                                                Ratio: <strong>{{ action.rights_ratio }}</strong>
+                                                {% if action.rights_price %}
+                                                    @ ₹{{ action.rights_price }}
+                                                {% endif %}
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <p class="text-muted">No corporate actions data available.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function refreshEvents() {
+    const btn = event.target.closest('button');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Fetching...';
+    
+    fetch('{% url "portfolio:fetch_stock_events_ajax" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: JSON.stringify({
+            symbol: '{{ stock.symbol }}',
+            event_type: 'all'
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Events refreshed successfully! Reloading page...');
+            location.reload();
+        } else {
+            alert('Error: ' + data.error);
+        }
+    })
+    .catch(error => {
+        alert('Error fetching events: ' + error);
+    })
+    .finally(() => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-sync"></i> Refresh Events';
+    });
+}
+</script>
+{% endblock %}

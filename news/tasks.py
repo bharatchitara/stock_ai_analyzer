@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 import pytz
 import logging
 
-from .models import NewsArticle, NewsSource, Category, Stock, Recommendation, MarketSession
+from .models import NewsArticle, NewsSource, Category, Stock, Recommendation, MarketSession, PortfolioHolding
 from .scraper import NewsScraper, StockMentionExtractor, NewsSourceConfig
 from analysis.ai_analyzer import NewsAnalyzer, RecommendationEngine
 
@@ -313,4 +313,133 @@ def cleanup_old_data():
         
     except Exception as e:
         logger.error(f"Error in data cleanup: {str(e)}")
+        return {'status': 'error', 'message': str(e)}
+
+
+@shared_task
+def fetch_holdings_news():
+    """
+    Celery task to fetch latest news for portfolio holdings
+    Runs every 6 hours
+    """
+    logger.info("Starting holdings news fetch task...")
+    
+    try:
+        from news.scraper import NewsScraper, StockMentionExtractor
+        
+        # Get all unique stocks from holdings
+        stock_ids = PortfolioHolding.objects.values_list('stock_id', flat=True).distinct()
+        stocks = Stock.objects.filter(id__in=stock_ids)
+        
+        if not stocks.exists():
+            logger.warning("No holdings found in portfolio")
+            return {'status': 'success', 'message': 'No holdings to fetch news for'}
+        
+        scraper = NewsScraper()
+        extractor = StockMentionExtractor()
+        
+        total_new = 0
+        total_skipped = 0
+        cutoff_time = timezone.now() - timedelta(hours=6)  # Only fetch news from last 6 hours
+        
+        for stock in stocks:
+            logger.info(f"Fetching news for {stock.symbol}...")
+            
+            try:
+                # Fetch news articles for this stock
+                articles = []
+                search_queries = [
+                    f"{stock.symbol} stock",
+                    f"{stock.company_name} share price"
+                ]
+                
+                for query in search_queries:
+                    try:
+                        results = scraper.scrape_google_news(query, max_results=5)
+                        articles.extend(results)
+                    except Exception as e:
+                        logger.warning(f"Error fetching Google News for {query}: {e}")
+                        continue
+                
+                # Remove duplicates
+                seen_urls = set()
+                unique_articles = []
+                for article in articles:
+                    if article['url'] not in seen_urls:
+                        seen_urls.add(article['url'])
+                        unique_articles.append(article)
+                
+                # Process articles
+                for article_data in unique_articles[:10]:
+                    try:
+                        # Check if article already exists
+                        if NewsArticle.objects.filter(url=article_data['url']).exists():
+                            total_skipped += 1
+                            continue
+                        
+                        # Skip old articles
+                        if article_data.get('published_at') and article_data['published_at'] < cutoff_time:
+                            total_skipped += 1
+                            continue
+                        
+                        # Generate AI summary
+                        ai_summary = scraper.generate_brief_summary(
+                            article_data['title'],
+                            article_data.get('content', article_data.get('summary', ''))
+                        )
+                        
+                        # Skip if not relevant
+                        if not ai_summary.get('is_relevant', True):
+                            total_skipped += 1
+                            continue
+                        
+                        # Get or create news source
+                        news_source, _ = NewsSource.objects.get_or_create(
+                            name=article_data['source_name'],
+                            defaults={
+                                'url': article_data.get('source_url', ''),
+                                'is_active': True
+                            }
+                        )
+                        
+                        # Create news article
+                        article = NewsArticle.objects.create(
+                            title=article_data['title'],
+                            url=article_data['url'],
+                            content=article_data.get('content', ''),
+                            summary=article_data.get('summary', ''),
+                            ai_summary=ai_summary.get('brief_summary', ''),
+                            source=news_source,
+                            published_at=article_data.get('published_at', timezone.now()),
+                            sentiment_score=ai_summary.get('sentiment_score', 0),
+                            is_recommendation=extractor.is_recommendation_article(
+                                article_data['title'] + ' ' + article_data.get('content', '')
+                            )
+                        )
+                        
+                        # Link to stock
+                        article.mentioned_stocks.add(stock)
+                        
+                        total_new += 1
+                        logger.info(f"Saved article: {article.title[:50]}...")
+                        
+                    except Exception as e:
+                        logger.error(f"Error saving article: {e}")
+                        continue
+                
+            except Exception as e:
+                logger.error(f"Error fetching news for {stock.symbol}: {e}")
+                continue
+        
+        logger.info(f"Holdings news fetch completed. New: {total_new}, Skipped: {total_skipped}")
+        
+        return {
+            'status': 'success',
+            'new_articles': total_new,
+            'skipped_articles': total_skipped,
+            'stocks_processed': stocks.count()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in holdings news fetch: {str(e)}")
         return {'status': 'error', 'message': str(e)}

@@ -1,27 +1,52 @@
 {% extends 'dashboard/base.html' %}
+{% load dashboard_filters %}
 
 {% block title %}Dashboard - Stock News AI{% endblock %}
 
 {% block content %}
+{% csrf_token %}
 <!-- Market Status Alert -->
 <div class="row mb-4">
     <div class="col-12">
-        <div class="alert alert-info d-flex align-items-center" role="alert">
-            <i class="bi bi-clock me-2"></i>
-            <div>
-                <strong>Pre-Market Analysis Complete</strong> - 
-                News collected until 9:10 AM IST for {{ today|date:"F j, Y" }}
-                <small class="ms-2">
-                    ({{ market_session.total_news_collected }} articles analyzed)
-                </small>
+        <div class="alert alert-info d-flex align-items-center justify-content-between" role="alert">
+            <div class="d-flex align-items-center">
+                <i class="bi bi-clock me-2"></i>
+                <div>
+                    <strong>Pre-Market Analysis Complete</strong> - 
+                    News collected until 9:10 AM IST for {{ today|date:"F j, Y" }}
+                    <small class="ms-2">
+                        (<span id="total-articles-count">{{ market_session.total_news_collected }}</span> articles analyzed)
+                    </small>
+                </div>
             </div>
+            <button id="run-collection-btn" class="btn btn-primary btn-sm">
+                <i class="fas fa-sync-alt me-1"></i> Collect Latest News
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Progress Toast -->
+<div class="position-fixed bottom-0 end-0 p-3" style="z-index: 11">
+    <div id="progress-toast" class="toast hide" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="toast-header bg-info text-white">
+            <i class="fas fa-spinner fa-spin me-2"></i>
+            <strong class="me-auto">News Collection</strong>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+        <div class="toast-body">
+            <div id="collection-status">Starting news collection...</div>
+            <div class="progress mt-2" style="height: 5px;">
+                <div id="collection-progress" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%"></div>
+            </div>
+            <small class="text-muted">This may take 3-5 minutes</small>
         </div>
     </div>
 </div>
 
 <!-- Stats Cards -->
 <div class="row mb-4">
-    <div class="col-md-3 mb-3">
+    <div class="col mb-3">
         <div class="card stats-card h-100">
             <div class="card-body text-center">
                 <i class="bi bi-newspaper fs-1 mb-2"></i>
@@ -31,17 +56,31 @@
         </div>
     </div>
     
-    <div class="col-md-3 mb-3">
-        <div class="card stats-card h-100">
-            <div class="card-body text-center">
-                <i class="bi bi-lightbulb fs-1 mb-2"></i>
-                <h3 class="mb-0">{{ latest_recommendations|length }}</h3>
-                <p class="mb-0">Active Recommendations</p>
+    <div class="col mb-3">
+        <a href="{% url 'dashboard:recommendations' %}" class="text-decoration-none">
+            <div class="card stats-card h-100">
+                <div class="card-body text-center">
+                    <i class="bi bi-lightbulb fs-1 mb-2"></i>
+                    <h3 class="mb-0">{{ latest_recommendations|length }}</h3>
+                    <p class="mb-0">Active Recommendations</p>
+                </div>
             </div>
-        </div>
+        </a>
     </div>
     
-    <div class="col-md-3 mb-3">
+    <div class="col mb-3">
+        <a href="{% url 'dashboard:trading_signals' %}" class="text-decoration-none">
+            <div class="card stats-card h-100">
+                <div class="card-body text-center">
+                    <i class="bi bi-graph-up-arrow fs-1 mb-2"></i>
+                    <h3 class="mb-0">New</h3>
+                    <p class="mb-0">Trading Signals</p>
+                </div>
+            </div>
+        </a>
+    </div>
+    
+    <div class="col mb-3">
         <div class="card stats-card h-100">
             <div class="card-body text-center">
                 <i class="bi bi-graph-up fs-1 mb-2"></i>
@@ -51,7 +90,7 @@
         </div>
     </div>
     
-    <div class="col-md-3 mb-3">
+    <div class="col mb-3">
         <div class="card stats-card h-100">
             <div class="card-body text-center">
                 <i class="bi bi-exclamation-triangle fs-1 mb-2"></i>
@@ -105,20 +144,41 @@
                 {% for article in pre_market_news %}
                 <div class="news-card p-3 border-bottom impact-{{ article.impact_level|lower }}">
                     <div class="d-flex justify-content-between align-items-start">
-                        <div class="flex-grow-1">
-                            <h6 class="mb-1">
+                        {% if article.article_emoji %}
+                        <div class="me-3 fs-2">{{ article.article_emoji }}</div>
+                        {% endif %}
+                        <div class="flex-grow-1" style="min-width: 0; overflow: hidden;">
+                            <h6 class="mb-1" style="word-wrap: break-word; overflow-wrap: break-word;">
                                 <a href="{% url 'dashboard:news_detail' article.id %}" 
-                                   class="text-decoration-none text-dark">
+                                   class="text-decoration-none text-dark" style="word-break: break-word;">
                                     {{ article.title }}
                                 </a>
+                                {% if article.is_recommendation %}
+                                <span class="badge bg-success ms-1"><i class="fas fa-star"></i> Recommendation</span>
+                                {% endif %}
                             </h6>
+                            
+                            {% if article.key_points %}
+                            <div class="alert alert-light py-2 px-3 mb-2">
+                                <small class="text-dark"><strong>Key Points:</strong></small>
+                                <div class="small">{{ article.key_points|linebreaks }}</div>
+                            </div>
+                            {% else %}
                             <p class="text-muted small mb-2">
                                 {{ article.summary|truncatewords:20 }}
                             </p>
-                            <div class="d-flex align-items-center gap-2 small text-muted">
-                                <span>{{ article.source.name }}</span>
+                            {% endif %}
+                            
+                            {% if article.impact_summary %}
+                            <div class="alert alert-info py-1 px-2 mb-2">
+                                <small><i class="fas fa-bolt me-1"></i><strong>Impact:</strong> {{ article.impact_summary }}</small>
+                            </div>
+                            {% endif %}
+                            
+                            <div class="d-flex align-items-center gap-2 small text-muted flex-wrap" style="word-break: break-word;">
+                                <span class="text-truncate">{{ article.source.name }}</span>
                                 <span>•</span>
-                                <span>{{ article.published_at|timesince }} ago</span>
+                                <span class="text-nowrap">{{ article.published_at|timesince }} ago</span>
                                 {% if article.category %}
                                 <span>•</span>
                                 <span class="badge bg-secondary">{{ article.category }}</span>
@@ -129,10 +189,31 @@
                             {% if article.is_pre_market %}
                             <span class="badge pre-market-badge mb-2">Pre-Market</span>
                             {% endif %}
-                            <div>
+                            <div class="mb-2">
                                 <span class="badge sentiment-{{ article.sentiment|lower }}">
                                     {{ article.get_sentiment_display }}
                                 </span>
+                            </div>
+                            {% if article.sentiment_score is not None %}
+                            <div class="sentiment-meter" style="width: 80px;">
+                                <small class="text-muted d-block" style="font-size: 0.7rem;">Sentiment</small>
+                                <div class="progress" style="height: 8px;">
+                                    {% if article.sentiment_score >= 0 %}
+                                    <div class="progress-bar bg-success" role="progressbar" 
+                                         style="width: {{ article.sentiment_score|multiply:100 }}%"
+                                         title="Score: {{ article.sentiment_score|floatformat:2 }}"></div>
+                                    {% else %}
+                                    <div class="progress-bar bg-danger" role="progressbar" 
+                                         style="width: {{ article.sentiment_score|multiply:-100 }}%"
+                                         title="Score: {{ article.sentiment_score|floatformat:2 }}"></div>
+                                    {% endif %}
+                                </div>
+                                <small class="text-muted" style="font-size: 0.65rem;">
+                                    {% if article.sentiment_score > 0 %}+{% endif %}{{ article.sentiment_score|floatformat:2 }}
+                                </small>
+                            </div>
+                            {% endif %}
+                            <div>
                             </div>
                         </div>
                     </div>
@@ -212,7 +293,7 @@
                     <div class="col-md-3">
                         <div class="card bg-light border-0">
                             <div class="card-body">
-                                <i class="bi bi-wallet2 text-primary fs-3"></i>
+                                <i class="fas fa-wallet text-primary fs-3"></i>
                                 <h4 class="mb-0 mt-2">₹{{ portfolio.total_investment|floatformat:2 }}</h4>
                                 <small class="text-muted">Total Investment</small>
                             </div>
@@ -221,7 +302,7 @@
                     <div class="col-md-3">
                         <div class="card bg-light border-0">
                             <div class="card-body">
-                                <i class="bi bi-graph-up text-success fs-3"></i>
+                                <i class="fas fa-chart-line text-success fs-3"></i>
                                 <h4 class="mb-0 mt-2">₹{{ portfolio.current_value|floatformat:2 }}</h4>
                                 <small class="text-muted">Current Value</small>
                             </div>
@@ -230,7 +311,7 @@
                     <div class="col-md-3">
                         <div class="card bg-light border-0">
                             <div class="card-body">
-                                <i class="bi bi-currency-rupee {% if portfolio.total_pnl >= 0 %}text-success{% else %}text-danger{% endif %} fs-3"></i>
+                                <i class="fas fa-rupee-sign {% if portfolio.total_pnl >= 0 %}text-success{% else %}text-danger{% endif %} fs-3"></i>
                                 <h4 class="mb-0 mt-2 {% if portfolio.total_pnl >= 0 %}text-success{% else %}text-danger{% endif %}">₹{{ portfolio.total_pnl|floatformat:2 }}</h4>
                                 <small class="text-muted">Total P&L</small>
                             </div>
@@ -239,7 +320,7 @@
                     <div class="col-md-3">
                         <div class="card bg-light border-0">
                             <div class="card-body">
-                                <i class="bi bi-percent {% if portfolio.total_pnl_percent >= 0 %}text-success{% else %}text-danger{% endif %} fs-3"></i>
+                                <i class="fas fa-percentage {% if portfolio.total_pnl_percent >= 0 %}text-success{% else %}text-danger{% endif %} fs-3"></i>
                                 <h4 class="mb-0 mt-2 {% if portfolio.total_pnl_percent >= 0 %}text-success{% else %}text-danger{% endif %}">{{ portfolio.total_pnl_percent|floatformat:2 }}%</h4>
                                 <small class="text-muted">Returns</small>
                             </div>
@@ -423,5 +504,96 @@ new Chart(categoryCtx, {
 function updateCharts() {
     location.reload();
 }
+
+// News Collection functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const collectBtn = document.getElementById('run-collection-btn');
+    const progressToast = new bootstrap.Toast(document.getElementById('progress-toast'));
+    const statusDiv = document.getElementById('collection-status');
+    const progressBar = document.getElementById('collection-progress');
+    const articlesCount = document.getElementById('total-articles-count');
+    
+    let checkInterval;
+    
+    collectBtn.addEventListener('click', function() {
+        // Disable button
+        collectBtn.disabled = true;
+        collectBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Collecting...';
+        
+        // Show toast
+        progressToast.show();
+        statusDiv.textContent = 'Starting news collection...';
+        progressBar.style.width = '10%';
+        
+        // Get CSRF token
+        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+        
+        // Start collection
+        fetch('{% url "dashboard:run_news_collection" %}', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrfToken,
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'started') {
+                statusDiv.textContent = 'Scraping news sources and recommendations...';
+                progressBar.style.width = '30%';
+                
+                // Start checking status
+                let progress = 30;
+                checkInterval = setInterval(checkStatus, 5000);
+                
+                // Simulate progress
+                const progressInterval = setInterval(() => {
+                    if (progress < 90) {
+                        progress += 5;
+                        progressBar.style.width = progress + '%';
+                    }
+                }, 10000);
+                
+                // Store interval IDs
+                window.progressInterval = progressInterval;
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            statusDiv.textContent = 'Error starting collection. Please try again.';
+            collectBtn.disabled = false;
+            collectBtn.innerHTML = '<i class="fas fa-sync-alt me-1"></i> Collect Latest News';
+        });
+    });
+    
+    function checkStatus() {
+        fetch('{% url "dashboard:check_collection_status" %}')
+        .then(response => response.json())
+        .then(data => {
+            if (data.recent_articles > 0) {
+                // Collection completed
+                clearInterval(checkInterval);
+                clearInterval(window.progressInterval);
+                
+                progressBar.style.width = '100%';
+                statusDiv.innerHTML = `<strong>✓ Complete!</strong> Collected ${data.recent_articles} articles (${data.recommendation_articles} recommendations)`;
+                
+                // Update count
+                articlesCount.textContent = data.total_today;
+                
+                // Re-enable button
+                setTimeout(() => {
+                    collectBtn.disabled = false;
+                    collectBtn.innerHTML = '<i class="fas fa-sync-alt me-1"></i> Collect Latest News';
+                    progressToast.hide();
+                    
+                    // Refresh page to show new articles
+                    setTimeout(() => location.reload(), 2000);
+                }, 3000);
+            }
+        })
+        .catch(error => console.error('Status check error:', error));
+    }
+});
 </script>
 {% endblock %}

@@ -210,14 +210,11 @@ class PortfolioImageProcessor:
         Use Google Gemini Vision API to extract holdings from image
         """
         try:
-            import google.generativeai as genai
+            from google import genai
             from PIL import Image
             
             # Configure Gemini
-            genai.configure(api_key=gemini_api_key)
-            
-            # Use gemini-flash-latest model
-            model = genai.GenerativeModel('gemini-flash-latest')
+            client = genai.Client(api_key=gemini_api_key)
             
             # Open and upload image
             img = Image.open(image_path)
@@ -234,8 +231,19 @@ Only return valid stock holdings. Return empty array if no holdings found.
 Format: [{"symbol": "RELIANCE", "quantity": 10, "avg_price": 2450.50, "current_price": 2500.00}]
 Return ONLY the JSON array, no other text."""
             
+            # Get model from config
+            try:
+                from news.models import AIConfig
+                config = AIConfig.get_active_config()
+                model_name = config.gemini_model
+            except:
+                model_name = 'gemini-2.5-flash'
+            
             # Generate response
-            response = model.generate_content([prompt, img])
+            response = client.models.generate_content(
+                model=model_name,
+                contents=[prompt, img]
+            )
             content = response.text
             
             # Extract JSON from response
@@ -265,101 +273,16 @@ Return ONLY the JSON array, no other text."""
     
     def extract_with_ai(self, image_path: str, openai_api_key: Optional[str] = None, gemini_api_key: Optional[str] = None) -> Dict:
         """
-        Use AI Vision API (OpenAI or Gemini) to extract holdings from image
-        Falls back to Gemini if OpenAI rate limit is hit
+        Use Gemini AI Vision API to extract holdings from image
+        Falls back to OCR if Gemini fails
         """
-        if not openai_api_key and not gemini_api_key:
-            return {
-                'success': False,
-                'error': 'AI API key required for AI extraction',
-                'holdings': []
-            }
+        if not gemini_api_key:
+            logger.info("No Gemini API key provided, using OCR extraction")
+            return self.extract_holdings_from_image(image_path)
         
         try:
-            import base64
-            import openai
-            from PIL import Image
-            import io
-            
-            # Encode image to base64
-            with open(image_path, 'rb') as image_file:
-                image_data = base64.b64encode(image_file.read()).decode('utf-8')
-            
-            # Call OpenAI Vision API
-            client = openai.OpenAI(api_key=openai_api_key)
-            
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": """Extract stock holdings information from this portfolio screenshot.
-                                Return a JSON array with objects containing:
-                                - symbol: stock symbol (e.g., RELIANCE, TCS)
-                                - quantity: number of shares
-                                - avg_price: average buy price per share
-                                - current_price: current market price (if visible)
-                                
-                                Only return valid stock holdings. Return empty array if no holdings found.
-                                Format: [{"symbol": "RELIANCE", "quantity": 10, "avg_price": 2450.50, "current_price": 2500.00}]"""
-                            },
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/jpeg;base64,{image_data}"
-                                }
-                            }
-                        ]
-                    }
-                ],
-                max_tokens=1000
-            )
-            
-            # Parse response
-            content = response.choices[0].message.content
-            
-            # Extract JSON from response
-            import json
-            json_match = re.search(r'\[.*\]', content, re.DOTALL)
-            if json_match:
-                holdings = json.loads(json_match.group())
-                return {
-                    'success': True,
-                    'holdings': holdings,
-                    'method': 'ai_vision'
-                }
-            else:
-                return {
-                    'success': False,
-                    'error': 'Could not parse AI response',
-                    'holdings': []
-                }
-                
-        except openai.RateLimitError as e:
-            logger.warning(f"OpenAI rate limit exceeded: {str(e)}")
-            # Fall back to Gemini if available, otherwise OCR
-            if gemini_api_key:
-                logger.info("Falling back to Gemini API due to OpenAI rate limit")
-                return self.extract_with_gemini(image_path, gemini_api_key)
-            else:
-                logger.info("Falling back to OCR extraction due to rate limit")
-                return self.extract_holdings_from_image(image_path)
-            
+            return self.extract_with_gemini(image_path, gemini_api_key)
         except Exception as e:
-            logger.error(f"Error with OpenAI extraction: {str(e)}")
-            # Check if it's a rate limit error in the message
-            if 'rate_limit' in str(e).lower() or 'rate limit' in str(e).lower():
-                if gemini_api_key:
-                    logger.info("Rate limit detected, falling back to Gemini API")
-                    return self.extract_with_gemini(image_path, gemini_api_key)
-                else:
-                    logger.info("Rate limit detected, falling back to OCR")
-                    return self.extract_holdings_from_image(image_path)
-            return {
-                'success': False,
-                'error': f"AI extraction failed: {str(e)}. Try using OCR instead or wait for rate limit reset.",
-                'holdings': []
-            }
+            logger.error(f"Error with Gemini extraction: {str(e)}")
+            logger.info("Falling back to OCR extraction")
+            return self.extract_holdings_from_image(image_path)

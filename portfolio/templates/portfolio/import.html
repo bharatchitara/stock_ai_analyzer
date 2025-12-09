@@ -406,11 +406,124 @@ function handleImageFile(file) {
     reader.readAsDataURL(file);
 }
 
-// Image form submission
+// Image form submission with AJAX (non-blocking)
 document.getElementById('imageImportForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
     const submitBtn = document.getElementById('imageSubmitBtn');
+    const formData = new FormData(this);
+    
+    // Disable button and show processing state
     submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Processing Image...';
     submitBtn.disabled = true;
+    
+    // Create toast notification
+    const toastHtml = `
+        <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 11">
+            <div id="importProgressToast" class="toast show" role="alert" aria-live="assertive" aria-atomic="true">
+                <div class="toast-header bg-info text-white">
+                    <i class="fas fa-image me-2"></i>
+                    <strong class="me-auto">Image Import</strong>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast"></button>
+                </div>
+                <div class="toast-body">
+                    <div id="import-status">Starting image extraction...</div>
+                    <div class="progress mt-2" style="height: 5px;">
+                        <div id="import-progress" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%"></div>
+                    </div>
+                    <small class="text-muted">This may take 10-30 seconds</small>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Remove existing toast if any
+    const existingToast = document.getElementById('importProgressToast');
+    if (existingToast) {
+        existingToast.parentElement.remove();
+    }
+    
+    // Add toast to body
+    document.body.insertAdjacentHTML('beforeend', toastHtml);
+    
+    // Get CSRF token
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+    
+    // Submit form via AJAX
+    fetch('{% url "portfolio:import_portfolio" %}', {
+        method: 'POST',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRFToken': csrfToken
+        },
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'started') {
+            // Start polling for status
+            const taskId = data.task_id;
+            const statusDiv = document.getElementById('import-status');
+            const progressBar = document.getElementById('import-progress');
+            
+            statusDiv.textContent = 'Extracting holdings from image...';
+            progressBar.style.width = '10%';
+            
+            // Poll status every 2 seconds
+            const checkInterval = setInterval(() => {
+                fetch(`{% url "portfolio:check_image_import_status" %}?task_id=${taskId}`)
+                .then(response => response.json())
+                .then(progress => {
+                    statusDiv.textContent = progress.message || 'Processing...';
+                    progressBar.style.width = progress.progress + '%';
+                    
+                    if (progress.status === 'COMPLETED') {
+                        clearInterval(checkInterval);
+                        progressBar.style.width = '100%';
+                        
+                        const summary = progress.result || {};
+                        const successCount = summary.success_count || 0;
+                        const skipCount = summary.skip_count || 0;
+                        
+                        statusDiv.innerHTML = `<strong>✓ Complete!</strong> Imported ${successCount} holdings` + 
+                            (skipCount > 0 ? ` (${skipCount} skipped)` : '');
+                        
+                        // Re-enable button
+                        submitBtn.innerHTML = '<i class="fas fa-magic me-2"></i>Extract & Import Holdings';
+                        submitBtn.disabled = false;
+                        
+                        // Redirect to portfolio after 3 seconds
+                        setTimeout(() => {
+                            window.location.href = '{% url "portfolio:dashboard" %}';
+                        }, 3000);
+                    } else if (progress.status === 'FAILED') {
+                        clearInterval(checkInterval);
+                        statusDiv.innerHTML = `<strong>✗ Error:</strong> ${progress.error || progress.message}`;
+                        progressBar.classList.remove('progress-bar-animated');
+                        progressBar.classList.add('bg-danger');
+                        
+                        // Re-enable button
+                        submitBtn.innerHTML = '<i class="fas fa-magic me-2"></i>Extract & Import Holdings';
+                        submitBtn.disabled = false;
+                    }
+                })
+                .catch(error => {
+                    console.error('Status check error:', error);
+                });
+            }, 2000);
+        } else {
+            // Error starting task
+            document.getElementById('import-status').innerHTML = `<strong>Error:</strong> ${data.message}`;
+            submitBtn.innerHTML = '<i class="fas fa-magic me-2"></i>Extract & Import Holdings';
+            submitBtn.disabled = false;
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        document.getElementById('import-status').innerHTML = '<strong>Error:</strong> Failed to start import';
+        submitBtn.innerHTML = '<i class="fas fa-magic me-2"></i>Extract & Import Holdings';
+        submitBtn.disabled = false;
+    });
 });
 </script>
 {% endblock %}

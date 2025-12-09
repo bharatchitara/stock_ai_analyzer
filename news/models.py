@@ -3,6 +3,38 @@ from django.utils import timezone
 from django.contrib.auth.models import User
 
 
+class AIConfig(models.Model):
+    """Configuration for AI models used in the application"""
+    name = models.CharField(max_length=100, unique=True, help_text="Configuration name (e.g., 'default', 'production')")
+    gemini_model = models.CharField(max_length=100, default='gemini-2.5-flash', help_text="Gemini model name")
+    openai_model = models.CharField(max_length=100, default='gpt-3.5-turbo', help_text="OpenAI model name")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    def __str__(self):
+        return f"{self.name} - Gemini: {self.gemini_model}"
+    
+    @classmethod
+    def get_active_config(cls):
+        """Get the active AI configuration"""
+        config = cls.objects.filter(is_active=True).first()
+        if not config:
+            # Create default config if none exists
+            config = cls.objects.create(
+                name='default',
+                gemini_model='gemini-2.5-flash',
+                openai_model='gpt-3.5-turbo',
+                is_active=True
+            )
+        return config
+    
+    class Meta:
+        verbose_name = 'AI Configuration'
+        verbose_name_plural = 'AI Configurations'
+        ordering = ['-is_active', '-updated_at']
+
+
 class NewsSource(models.Model):
     """Model for news sources like Economic Times, Business Standard, etc."""
     name = models.CharField(max_length=100, unique=True)
@@ -93,6 +125,12 @@ class NewsArticle(models.Model):
     impact_level = models.CharField(max_length=10, choices=IMPACT_CHOICES, default='PENDING')
     confidence_score = models.FloatField(null=True, blank=True)  # 0 to 1 scale
     
+    # AI-generated visual summary fields
+    ai_summary = models.JSONField(null=True, blank=True)  # Stores key_points, impact, emoji
+    key_points = models.TextField(blank=True)  # Brief bullet points
+    impact_summary = models.CharField(max_length=200, blank=True)  # One-line impact
+    article_emoji = models.CharField(max_length=10, blank=True)  # Visual indicator
+    
     # Related stocks mentioned in the news
     mentioned_stocks = models.ManyToManyField(Stock, blank=True)
     
@@ -104,6 +142,7 @@ class NewsArticle(models.Model):
     # Metadata
     is_analyzed = models.BooleanField(default=False)
     is_pre_market = models.BooleanField(default=False)  # Published before 9:10 AM
+    is_recommendation = models.BooleanField(default=False)  # Contains stock recommendations
     view_count = models.PositiveIntegerField(default=0)
     
     def __str__(self):

@@ -17,7 +17,6 @@ class PortfolioAnalyzer:
     """Comprehensive portfolio analysis using AI and market data"""
     
     def __init__(self):
-        self.openai_api_key = getattr(settings, 'OPENAI_API_KEY', None)
         self.gemini_api_key = getattr(settings, 'GEMINI_API_KEY', None)
     
     def analyze_portfolio(self, holdings_queryset) -> Dict:

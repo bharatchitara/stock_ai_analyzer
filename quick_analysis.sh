@@ -20,6 +20,22 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR"
 source .venv/bin/activate
 
+# Function to check and kill Django server
+kill_django_server() {
+    echo -e "${BLUE}🔍 Checking for existing Django server...${NC}"
+    for port in 8000 9000 9150; do
+        PIDS=$(lsof -ti:$port 2>/dev/null)
+        if [ ! -z "$PIDS" ]; then
+            echo -e "${BLUE}🛑 Found Django server on port $port. Stopping...${NC}"
+            kill -9 $PIDS 2>/dev/null
+        fi
+    done
+    sleep 1
+}
+
+# Kill existing Django server if running
+kill_django_server
+
 echo -e "${YELLOW}Step 1/3: Updating Stock Prices...${NC}"
 python manage.py update_prices --all 2>&1 | tail -5
 echo -e "${GREEN}✓ Prices updated${NC}"
@@ -32,7 +48,7 @@ from django.utils import timezone
 from datetime import timedelta
 
 try:
-    import google.generativeai as genai
+    from google import genai
     from django.conf import settings
     
     cutoff = timezone.now() - timedelta(days=30)
@@ -42,13 +58,19 @@ try:
     )[:20]
     
     if pending.count() > 0:
-        genai.configure(api_key=settings.GEMINI_API_KEY)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        from news.models import AIConfig
+        
+        client = genai.Client(api_key=settings.GEMINI_API_KEY)
+        config = AIConfig.get_active_config()
+        model_name = config.gemini_model
         
         for article in pending:
             try:
                 prompt = f"Analyze sentiment of this news title: '{article.title}'\nRespond with only: POSITIVE, NEGATIVE, or NEUTRAL"
-                response = model.generate_content(prompt)
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=prompt
+                )
                 sentiment = response.text.strip().upper()
                 
                 if sentiment in ['POSITIVE', 'NEGATIVE', 'NEUTRAL']:

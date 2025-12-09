@@ -101,6 +101,12 @@ python manage.py shell
 - Confidence levels and risk assessment
 - AI-generated reasoning
 
+### Trading Signals (NEW!)
+- **Buy Signals**: FII increase, Promoter increase, Top 50 value stocks
+- **Sell Signals**: Promoter decrease in held stocks
+- Automatic data fetching from NSE/BSE
+- Real-time holding pattern analysis
+
 ## 🛠️ Development Commands:
 
 ```bash
@@ -124,6 +130,10 @@ python manage.py test
 
 # Django shell for testing
 python manage.py shell
+
+# Fetch stock events (insider trades, promoter holdings, etc.)
+python manage.py fetch_stock_events --symbol RELIANCE --event-type promoter
+python manage.py fetch_stock_events --holdings-only --event-type promoter --days 90
 ```
 
 ## 🎨 Customization Options:

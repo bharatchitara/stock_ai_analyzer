@@ -18,6 +18,7 @@ from .importers import PortfolioImporter
 from .stock_fetcher import StockPriceFetcher
 from .task_progress import TaskProgress
 import uuid
+import threading
 
 
 def get_default_user():
@@ -580,14 +581,45 @@ def handle_image_import(request):
     import os
     from .image_processor import PortfolioImageProcessor
     
+    # Check if AJAX request
+    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+    
     if 'portfolio_image' not in request.FILES:
+        if is_ajax:
+            return JsonResponse({'status': 'error', 'message': 'No image file uploaded'})
         messages.error(request, 'No image file uploaded')
         return redirect('portfolio:import_portfolio')
     
     image_file = request.FILES['portfolio_image']
     use_ai = request.POST.get('use_ai_extraction') == 'on'
+    replace_existing = request.POST.get('replace_existing') == 'on'
     
-    # Show progress message
+    # Generate task ID for tracking
+    task_id = str(uuid.uuid4())
+    
+    # If AJAX, start background processing and return immediately
+    if is_ajax:
+        # Save uploaded image temporarily
+        from django.core.files.storage import default_storage
+        from django.core.files.base import ContentFile
+        image_path = default_storage.save(f'temp/import_{task_id}_{image_file.name}', ContentFile(image_file.read()))
+        full_image_path = os.path.join(settings.MEDIA_ROOT, image_path)
+        
+        # Start background processing
+        thread = threading.Thread(
+            target=process_image_import_background,
+            args=(task_id, full_image_path, use_ai, replace_existing)
+        )
+        thread.daemon = True
+        thread.start()
+        
+        return JsonResponse({
+            'status': 'started',
+            'task_id': task_id,
+            'message': 'Image processing started'
+        })
+    
+    # Show progress message (for non-AJAX requests)
     if use_ai:
         messages.info(request, '🤖 Extracting holdings from image using AI... This may take 10-20 seconds.')
     else:
@@ -622,7 +654,7 @@ def handle_image_import(request):
         if not result['success']:
             error_msg = result.get('error', 'Unknown error')
             if 'rate limit' in error_msg.lower():
-                messages.warning(request, f"OpenAI rate limit reached. Please try again later or uncheck 'Use AI' to use OCR instead.")
+                messages.warning(request, f"AI rate limit reached. Please try again later or uncheck 'Use AI' to use OCR instead.")
             else:
                 messages.error(request, f"Image processing failed: {error_msg}")
             return redirect('portfolio:import_portfolio')
@@ -748,6 +780,163 @@ def handle_image_import(request):
         # Clean up temporary file
         if os.path.exists(full_image_path):
             os.remove(full_image_path)
+
+
+def process_image_import_background(task_id, image_path, use_ai, replace_existing):
+    """Background task to process image import"""
+    from django.core.files.storage import default_storage
+    from django.conf import settings
+    import os
+    from .image_processor import PortfolioImageProcessor
+    
+    # Initialize task progress
+    TaskProgress.create_task(task_id, 'image_import', 0)
+    TaskProgress.update_progress(task_id, 0, '', 'Starting image extraction...')
+    
+    try:
+        # Process image
+        processor = PortfolioImageProcessor()
+        TaskProgress.update_progress(task_id, 20, '', 'Analyzing image...')
+        
+        if use_ai:
+            openai_key = getattr(settings, 'OPENAI_API_KEY', None)
+            gemini_key = getattr(settings, 'GEMINI_API_KEY', None)
+            
+            if openai_key or gemini_key:
+                result = processor.extract_with_ai(image_path, openai_key, gemini_key)
+            else:
+                result = processor.extract_holdings_from_image(image_path)
+        else:
+            result = processor.extract_holdings_from_image(image_path)
+        
+        TaskProgress.update_progress(task_id, 40, '', 'Extracting holdings data...')
+        
+        if not result['success']:
+            error_msg = result.get('error', 'Unknown error')
+            TaskProgress.complete_task(task_id, error=f'Extraction failed: {error_msg}')
+            return
+        
+        holdings_data = result['holdings']
+        
+        if not holdings_data:
+            TaskProgress.complete_task(task_id, error='No holdings detected in image')
+            return
+        
+        TaskProgress.update_progress(task_id, 60, '', f'Found {len(holdings_data)} holdings, importing...')
+        
+        # Get or create portfolio
+        portfolio, created = UserPortfolio.objects.get_or_create(user=get_default_user())
+        
+        # Handle replace existing
+        if replace_existing:
+            deleted_count = portfolio.holdings.count()
+            portfolio.holdings.all().delete()
+        
+        # Import holdings
+        success_count = 0
+        skip_count = 0
+        errors = []
+        
+        for i, holding_data in enumerate(holdings_data):
+            try:
+                symbol = holding_data.get('symbol', '').upper()
+                quantity = int(holding_data.get('quantity', 0))
+                avg_price = Decimal(str(holding_data.get('avg_price', 0)))
+                
+                if not symbol or quantity <= 0 or avg_price <= 0:
+                    skip_count += 1
+                    continue
+                
+                # Get or create stock
+                stock, stock_created = Stock.objects.get_or_create(
+                    symbol=symbol,
+                    defaults={'company_name': symbol, 'sector': 'Unknown'}
+                )
+                
+                if not replace_existing:
+                    existing_holding = PortfolioHolding.objects.filter(
+                        portfolio=portfolio, stock=stock
+                    ).first()
+                    
+                    if existing_holding:
+                        total_shares = existing_holding.quantity + quantity
+                        total_investment = (
+                            existing_holding.quantity * existing_holding.average_price +
+                            quantity * avg_price
+                        )
+                        new_average_price = total_investment / total_shares
+                        existing_holding.quantity = total_shares
+                        existing_holding.average_price = new_average_price
+                        existing_holding.save()
+                        success_count += 1
+                        continue
+                
+                # Create new holding
+                PortfolioHolding.objects.create(
+                    portfolio=portfolio,
+                    stock=stock,
+                    quantity=quantity,
+                    average_price=avg_price,
+                    purchase_date=date.today(),
+                    notes="Imported from portfolio screenshot"
+                )
+                success_count += 1
+                
+                # Update progress
+                progress = 60 + int((i + 1) / len(holdings_data) * 30)
+                TaskProgress.update_progress(task_id, progress, '', f'Imported {success_count}/{len(holdings_data)} holdings...')
+                
+            except Exception as e:
+                errors.append(f"{holding_data.get('symbol', 'unknown')}: {str(e)}")
+                skip_count += 1
+        
+        # Fetch current prices
+        TaskProgress.update_progress(task_id, 90, '', 'Fetching current stock prices...')
+        symbols = [h['symbol'] for h in holdings_data if h.get('symbol')]
+        unique_symbols = list(set(symbols))
+        stocks_to_update = Stock.objects.filter(symbol__in=unique_symbols)
+        
+        fetcher = StockPriceFetcher()
+        price_result = fetcher.update_stock_prices(stocks_to_update)
+        
+        # Complete
+        summary = {
+            'success_count': success_count,
+            'skip_count': skip_count,
+            'error_count': len(errors),
+            'errors': errors,
+            'detected_broker': result.get('detected_broker'),
+            'extraction_method': result.get('method', 'ocr'),
+            'prices_updated': price_result.get('updated', 0)
+        }
+        
+        TaskProgress.update_progress(task_id, 100, '', f'Successfully imported {success_count} holdings!')
+        TaskProgress.complete_task(task_id, result=summary)
+        
+    except Exception as e:
+        TaskProgress.complete_task(task_id, error=f'Import failed: {str(e)}')
+    finally:
+        # Clean up temporary file
+        if os.path.exists(image_path):
+            try:
+                os.remove(image_path)
+            except:
+                pass
+
+
+def check_image_import_status(request):
+    """Check status of image import task"""
+    task_id = request.GET.get('task_id')
+    
+    if not task_id:
+        return JsonResponse({'status': 'error', 'message': 'No task ID provided'})
+    
+    progress = TaskProgress.get_progress(task_id)
+    
+    if not progress:
+        return JsonResponse({'status': 'error', 'message': 'Task not found'})
+    
+    return JsonResponse(progress)
 
 
 def handle_broker_import(request):
@@ -911,6 +1100,135 @@ def refresh_stock_prices(request):
     return redirect('portfolio:dashboard')
 
 
+def fetch_holdings_news(request):
+    """Manually fetch latest news for portfolio holdings"""
+    if request.method == 'POST':
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            # AJAX request
+            try:
+                from news.scraper import NewsScraper, StockMentionExtractor
+                from news.models import NewsArticle, NewsSource, PortfolioHolding
+                from datetime import timedelta
+                from django.utils import timezone
+                
+                # Get all unique stocks from holdings
+                stock_ids = PortfolioHolding.objects.values_list('stock_id', flat=True).distinct()
+                stocks = Stock.objects.filter(id__in=stock_ids)
+                
+                if not stocks.exists():
+                    return JsonResponse({
+                        'success': False,
+                        'error': 'No holdings found in portfolio'
+                    })
+                
+                scraper = NewsScraper()
+                extractor = StockMentionExtractor()
+                
+                total_new = 0
+                total_skipped = 0
+                cutoff_time = timezone.now() - timedelta(hours=6)
+                
+                for stock in stocks:
+                    try:
+                        # Fetch news articles for this stock
+                        articles = []
+                        search_queries = [
+                            f"{stock.symbol} stock",
+                            f"{stock.company_name} share price"
+                        ]
+                        
+                        for query in search_queries[:1]:  # Limit to 1 query per stock for speed
+                            try:
+                                results = scraper.scrape_google_news(query, max_results=5)
+                                articles.extend(results)
+                            except Exception:
+                                continue
+                        
+                        # Remove duplicates
+                        seen_urls = set()
+                        unique_articles = []
+                        for article in articles:
+                            if article['url'] not in seen_urls:
+                                seen_urls.add(article['url'])
+                                unique_articles.append(article)
+                        
+                        # Process articles
+                        for article_data in unique_articles[:5]:
+                            try:
+                                # Check if article already exists
+                                if NewsArticle.objects.filter(url=article_data['url']).exists():
+                                    total_skipped += 1
+                                    continue
+                                
+                                # Skip old articles
+                                if article_data.get('published_at') and article_data['published_at'] < cutoff_time:
+                                    total_skipped += 1
+                                    continue
+                                
+                                # Generate AI summary
+                                ai_summary = scraper.generate_brief_summary(
+                                    article_data['title'],
+                                    article_data.get('content', article_data.get('summary', ''))
+                                )
+                                
+                                # Skip if not relevant
+                                if not ai_summary.get('is_relevant', True):
+                                    total_skipped += 1
+                                    continue
+                                
+                                # Get or create news source
+                                news_source, _ = NewsSource.objects.get_or_create(
+                                    name=article_data['source_name'],
+                                    defaults={
+                                        'url': article_data.get('source_url', ''),
+                                        'is_active': True
+                                    }
+                                )
+                                
+                                # Create news article
+                                article = NewsArticle.objects.create(
+                                    title=article_data['title'],
+                                    url=article_data['url'],
+                                    content=article_data.get('content', ''),
+                                    summary=article_data.get('summary', ''),
+                                    ai_summary=ai_summary.get('brief_summary', ''),
+                                    source=news_source,
+                                    published_at=article_data.get('published_at', timezone.now()),
+                                    sentiment_score=ai_summary.get('sentiment_score', 0),
+                                    is_recommendation=extractor.is_recommendation_article(
+                                        article_data['title'] + ' ' + article_data.get('content', '')
+                                    )
+                                )
+                                
+                                # Link to stock
+                                article.mentioned_stocks.add(stock)
+                                total_new += 1
+                                
+                            except Exception:
+                                continue
+                        
+                    except Exception:
+                        continue
+                
+                return JsonResponse({
+                    'success': True,
+                    'new_articles': total_new,
+                    'skipped_articles': total_skipped,
+                    'stocks_processed': stocks.count()
+                })
+            
+            except Exception as e:
+                return JsonResponse({
+                    'success': False,
+                    'error': str(e)
+                }, status=500)
+        else:
+            # Regular form POST - show info message and continue in background
+            messages.info(request, '📰 Fetching latest news for your holdings in background. You can continue working...')
+    
+    return redirect('portfolio:dashboard')
+
+
 def analyze_portfolio(request):
     """AI-powered comprehensive portfolio analysis"""
     from .portfolio_analyzer import PortfolioAnalyzer
@@ -970,3 +1288,170 @@ def analysis_results(request):
     }
     
     return render(request, 'portfolio/analysis_results.html', context)
+
+
+def stock_events(request, symbol):
+    """Display all events for a specific stock"""
+    from .models import InsiderTrade, BulkDeal, BlockDeal, CorporateAction, PromoterHolding
+    
+    stock = get_object_or_404(Stock, symbol=symbol)
+    
+    # Get all events
+    insider_trades = InsiderTrade.objects.filter(stock=stock).order_by('-transaction_date')[:20]
+    bulk_deals = BulkDeal.objects.filter(stock=stock).order_by('-deal_date')[:20]
+    block_deals = BlockDeal.objects.filter(stock=stock).order_by('-deal_date')[:20]
+    corporate_actions = CorporateAction.objects.filter(stock=stock).order_by('-ex_date', '-announcement_date')[:20]
+    promoter_holdings = PromoterHolding.objects.filter(stock=stock).order_by('-quarter_end_date')[:8]
+    
+    # Calculate promoter holding trend
+    if promoter_holdings.count() >= 2:
+        latest = promoter_holdings[0]
+        previous = promoter_holdings[1]
+        promoter_change = float(latest.promoter_holding - previous.promoter_holding)
+    else:
+        promoter_change = 0
+    
+    context = {
+        'stock': stock,
+        'insider_trades': insider_trades,
+        'bulk_deals': bulk_deals,
+        'block_deals': block_deals,
+        'corporate_actions': corporate_actions,
+        'promoter_holdings': promoter_holdings,
+        'promoter_change': promoter_change,
+    }
+    
+    return render(request, 'portfolio/stock_events.html', context)
+
+
+def holding_events(request, holding_id):
+    """Display all events for a specific holding"""
+    from .models import InsiderTrade, BulkDeal, BlockDeal, CorporateAction, PromoterHolding
+    
+    holding = get_object_or_404(PortfolioHolding, id=holding_id)
+    stock = holding.stock
+    
+    # Get all events (limited to last 90 days for some)
+    ninety_days_ago = datetime.now().date() - timedelta(days=90)
+    
+    insider_trades = InsiderTrade.objects.filter(
+        stock=stock,
+        transaction_date__gte=ninety_days_ago
+    ).order_by('-transaction_date')[:15]
+    
+    bulk_deals = BulkDeal.objects.filter(
+        stock=stock,
+        deal_date__gte=ninety_days_ago
+    ).order_by('-deal_date')[:15]
+    
+    block_deals = BlockDeal.objects.filter(
+        stock=stock,
+        deal_date__gte=ninety_days_ago
+    ).order_by('-deal_date')[:15]
+    
+    corporate_actions = CorporateAction.objects.filter(stock=stock).order_by('-ex_date', '-announcement_date')[:10]
+    promoter_holdings = PromoterHolding.objects.filter(stock=stock).order_by('-quarter_end_date')[:8]
+    
+    # Get related news
+    related_news = NewsArticle.objects.filter(
+        Q(title__icontains=stock.symbol) | Q(content__icontains=stock.symbol)
+    ).order_by('-published_at')[:10]
+    
+    context = {
+        'holding': holding,
+        'stock': stock,
+        'insider_trades': insider_trades,
+        'bulk_deals': bulk_deals,
+        'block_deals': block_deals,
+        'corporate_actions': corporate_actions,
+        'promoter_holdings': promoter_holdings,
+        'related_news': related_news,
+    }
+    
+    return render(request, 'portfolio/holding_events.html', context)
+
+
+@require_http_methods(["POST"])
+def fetch_stock_events_ajax(request):
+    """AJAX endpoint to fetch stock events on demand"""
+    from .stock_events_fetcher import StockEventFetcher
+    from .models import InsiderTrade, BulkDeal, BlockDeal, CorporateAction, PromoterHolding
+    
+    try:
+        data = json.loads(request.body)
+        symbol = data.get('symbol')
+        event_type = data.get('event_type', 'all')
+        
+        if not symbol:
+            return JsonResponse({'success': False, 'error': 'Symbol required'}, status=400)
+        
+        stock = Stock.objects.filter(symbol=symbol).first()
+        if not stock:
+            return JsonResponse({'success': False, 'error': 'Stock not found'}, status=404)
+        
+        fetcher = StockEventFetcher()
+        results = {'success': True, 'fetched': {}}
+        
+        # Fetch requested event types
+        if event_type in ['insider', 'all']:
+            trades = fetcher.fetch_insider_trades(symbol)
+            saved = 0
+            for trade_data in trades:
+                _, created = InsiderTrade.objects.get_or_create(
+                    stock=stock,
+                    insider_name=trade_data['insider_name'],
+                    transaction_date=trade_data['transaction_date'],
+                    quantity=trade_data['quantity'],
+                    defaults=trade_data
+                )
+                if created:
+                    saved += 1
+            results['fetched']['insider_trades'] = saved
+        
+        if event_type in ['bulk', 'all']:
+            deals = fetcher.fetch_bulk_deals(symbol)
+            saved = 0
+            for deal_data in deals:
+                deal_data.pop('symbol', None)
+                _, created = BulkDeal.objects.get_or_create(
+                    stock=stock,
+                    client_name=deal_data['client_name'],
+                    deal_date=deal_data['deal_date'],
+                    quantity=deal_data['quantity'],
+                    defaults=deal_data
+                )
+                if created:
+                    saved += 1
+            results['fetched']['bulk_deals'] = saved
+        
+        if event_type in ['corporate', 'all']:
+            actions = fetcher.fetch_corporate_actions(symbol)
+            saved = 0
+            for action_data in actions:
+                _, created = CorporateAction.objects.get_or_create(
+                    stock=stock,
+                    action_type=action_data['action_type'],
+                    announcement_date=action_data['announcement_date'],
+                    defaults=action_data
+                )
+                if created:
+                    saved += 1
+            results['fetched']['corporate_actions'] = saved
+        
+        if event_type in ['promoter', 'all']:
+            holdings = fetcher.fetch_promoter_holding(symbol)
+            saved = 0
+            for holding_data in holdings:
+                _, created = PromoterHolding.objects.update_or_create(
+                    stock=stock,
+                    quarter_end_date=holding_data['quarter_end_date'],
+                    defaults=holding_data
+                )
+                if created:
+                    saved += 1
+            results['fetched']['promoter_holdings'] = saved
+        
+        return JsonResponse(results)
+        
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)

@@ -29,6 +29,10 @@ app.conf.beat_schedule = {
         'task': 'news.tasks.generate_daily_recommendations',
         'schedule': crontab(hour=8, minute=30),  # Run at 8:30 AM IST daily
     },
+    'fetch-holdings-news-every-6-hours': {
+        'task': 'news.tasks.fetch_holdings_news',
+        'schedule': crontab(minute=0, hour='*/6'),  # Run every 6 hours
+    },
     'cleanup-old-data': {
         'task': 'news.tasks.cleanup_old_data',
         'schedule': crontab(hour=23, minute=0),  # Run at 11:00 PM IST daily

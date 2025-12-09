@@ -1,0 +1,1 @@
+# This file should remain empty for Django to properly discover template tags

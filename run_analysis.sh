@@ -42,6 +42,21 @@ fi
 echo -e "${GREEN}✓ Environment ready${NC}"
 echo ""
 
+# Function to check and kill Django server
+kill_django_server() {
+    echo -e "${YELLOW}🔍 Checking for existing Django server...${NC}"
+    # Check common Django ports: 8000, 9000, 9150
+    for port in 8000 9000 9150; do
+        PIDS=$(lsof -ti:$port 2>/dev/null)
+        if [ ! -z "$PIDS" ]; then
+            echo -e "${YELLOW}🛑 Found Django server on port $port. Stopping...${NC}"
+            kill -9 $PIDS 2>/dev/null
+        fi
+    done
+    sleep 1
+    echo -e "${GREEN}✓ Server check complete${NC}"
+}
+
 # Function to show progress
 show_progress() {
     local message=$1
@@ -62,22 +77,20 @@ show_error() {
 
 # Step 1: News Collection
 echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${YELLOW}Step 1: Collecting Latest News${NC}"
+echo -e "${YELLOW}Step 1: Collecting Latest News + Recommendations${NC}"
 echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-show_progress "Scraping news from sources..."
+show_progress "Scraping news from all sources + Google News recommendations..."
 
-python manage.py shell << 'PYEOF'
-print("\n🔍 Starting news collection...")
-try:
-    # Try to import required modules
-    try:
-        from news.scraper import scrape_morning_news
-        from django.utils import timezone
-        
-        # Run the news scraper
-        result = scrape_morning_news()
-        print(f"✓ Collected {result.get('total_articles', 0)} articles")
-        print(f"  - Saved: {result.get('articles_saved', 0)}")
+# Use the new enhanced scrape_news command
+python manage.py scrape_news 2>&1 | grep -E "✓|articles|Scraping|recommendation" | tail -20
+
+if [ $? -eq 0 ]; then
+    show_success "News collection completed"
+else
+    show_error "News collection had some errors (continuing...)"
+fi
+
+echo ""
         print(f"  - Duplicates: {result.get('duplicates_skipped', 0)}")
     except ImportError as ie:
         print(f"⚠ News scraper not available: {str(ie)}")

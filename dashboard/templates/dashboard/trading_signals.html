@@ -1,0 +1,587 @@
+{% extends 'dashboard/base.html' %}
+
+{% block title %}Trading Signals - Stock News AI{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h2><i class="bi bi-graph-up-arrow"></i> Trading Signals</h2>
+        <p class="text-muted">Smart buy/sell signals based on institutional holdings and price movements</p>
+    </div>
+</div>
+
+<!-- Buy Signals Section -->
+<div class="row mb-4">
+    <div class="col-12">
+        <h4 class="mb-3"><i class="bi bi-cart-plus text-success"></i> Buy Signals - New Stock Opportunities</h4>
+    </div>
+</div>
+
+<!-- FII Holding Increased -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0">
+                    <i class="bi bi-building"></i> FII Holding Increased (Last 30 Days)
+                </h5>
+                <small>Stocks where Foreign Institutional Investors increased stake by 2%+</small>
+            </div>
+            <div class="card-body p-0">
+                {% if fii_increased %}
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Stock</th>
+                                <th>FII Change</th>
+                                <th>Latest FII %</th>
+                                <th>Previous FII %</th>
+                                <th>Date</th>
+                                <th>Confidence</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for signal in fii_increased %}
+                            <tr>
+                                <td>
+                                    <strong>{{ signal.stock.symbol }}</strong><br>
+                                    <small class="text-muted">{{ signal.stock.company_name }}</small>
+                                </td>
+                                <td>
+                                    <span class="badge bg-success fs-6">
+                                        <i class="bi bi-arrow-up"></i> +{{ signal.fii_change|floatformat:2 }}%
+                                    </span>
+                                </td>
+                                <td>{{ signal.latest_fii|floatformat:2 }}%</td>
+                                <td>{{ signal.previous_fii|floatformat:2 }}%</td>
+                                <td>
+                                    <small>{{ signal.latest_date }}</small>
+                                </td>
+                                <td>
+                                    <div class="progress" style="height: 20px; width: 80px;">
+                                        <div class="progress-bar bg-success" role="progressbar" 
+                                             style="width: {{ signal.confidence }}%">
+                                            {{ signal.confidence }}%
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="badge bg-success">BUY</span>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="p-4 text-center text-muted">
+                    <i class="bi bi-inbox fs-1 mb-3 d-block"></i>
+                    <p>No FII increase signals found in last 30 days</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Top 50 Stocks Dipped -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0">
+                    <i class="bi bi-star"></i> Top 50 Stocks - Value Buying Opportunity
+                </h5>
+                <small>Nifty50/Sensex stocks available for value investing</small>
+            </div>
+            <div class="card-body p-0">
+                {% if top50_dipped %}
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Stock</th>
+                                <th>Index</th>
+                                <th>Current Price</th>
+                                <th>Promoter Holding</th>
+                                <th>Confidence</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for signal in top50_dipped %}
+                            <tr>
+                                <td>
+                                    <strong>{{ signal.stock.symbol }}</strong><br>
+                                    <small class="text-muted">{{ signal.stock.company_name }}</small>
+                                </td>
+                                <td>
+                                    {% if signal.is_nifty50 %}
+                                    <span class="badge bg-primary">Nifty 50</span>
+                                    {% endif %}
+                                    {% if signal.is_sensex %}
+                                    <span class="badge bg-warning">Sensex</span>
+                                    {% endif %}
+                                </td>
+                                <td>₹{{ signal.current_price|floatformat:2 }}</td>
+                                <td>
+                                    {% if signal.promoter_holding %}
+                                    {{ signal.promoter_holding|floatformat:2 }}%
+                                    {% else %}
+                                    <span class="text-muted">N/A</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="progress" style="height: 20px; width: 80px;">
+                                        <div class="progress-bar bg-info" role="progressbar" 
+                                             style="width: {{ signal.confidence }}%">
+                                            {{ signal.confidence }}%
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="badge bg-info">BUY</span>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="p-4 text-center text-muted">
+                    <i class="bi bi-inbox fs-1 mb-3 d-block"></i>
+                    <p>No top 50 stock signals found</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Promoter Holding Increased -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">
+                    <i class="bi bi-person-check"></i> Promoter Holding Increased (Last Quarter)
+                </h5>
+                <small>Stocks where promoters increased stake by 1%+ (shows management confidence)</small>
+            </div>
+            <div class="card-body p-0">
+                {% if promoter_increased %}
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Stock</th>
+                                <th>Promoter Change</th>
+                                <th>Latest %</th>
+                                <th>Previous %</th>
+                                <th>Pledged %</th>
+                                <th>Date</th>
+                                <th>Confidence</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for signal in promoter_increased %}
+                            <tr>
+                                <td>
+                                    <strong>{{ signal.stock.symbol }}</strong><br>
+                                    <small class="text-muted">{{ signal.stock.company_name }}</small>
+                                </td>
+                                <td>
+                                    <span class="badge bg-success fs-6">
+                                        <i class="bi bi-arrow-up"></i> +{{ signal.promoter_change|floatformat:2 }}%
+                                    </span>
+                                </td>
+                                <td>{{ signal.latest_promoter|floatformat:2 }}%</td>
+                                <td>{{ signal.previous_promoter|floatformat:2 }}%</td>
+                                <td>
+                                    {% if signal.promoter_pledged > 0 %}
+                                    <span class="badge bg-warning">{{ signal.promoter_pledged|floatformat:2 }}%</span>
+                                    {% else %}
+                                    <span class="badge bg-success">0%</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <small>{{ signal.latest_date }}</small>
+                                </td>
+                                <td>
+                                    <div class="progress" style="height: 20px; width: 80px;">
+                                        <div class="progress-bar bg-primary" role="progressbar" 
+                                             style="width: {{ signal.confidence }}%">
+                                            {{ signal.confidence }}%
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="badge bg-primary">BUY</span>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="p-4 text-center text-muted">
+                    <i class="bi bi-inbox fs-1 mb-3 d-block"></i>
+                    <p>No promoter increase signals found in last quarter</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Sell Signals Section -->
+<div class="row mb-4">
+    <div class="col-12">
+        <h4 class="mb-3"><i class="bi bi-exclamation-triangle text-danger"></i> Sell Signals - Held Stocks</h4>
+    </div>
+</div>
+
+<!-- Promoter Holding Decreased (Held Stocks) -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card border-danger">
+            <div class="card-header bg-danger text-white">
+                <h5 class="mb-0">
+                    <i class="bi bi-person-x"></i> Promoter Holding Decreased (Your Holdings)
+                </h5>
+                <small>Your held stocks where promoters decreased stake by 1%+ (warning signal)</small>
+            </div>
+            <div class="card-body p-0">
+                {% if has_portfolio %}
+                    {% if promoter_decreased %}
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Stock</th>
+                                    <th>Your Holding</th>
+                                    <th>Promoter Change</th>
+                                    <th>Latest %</th>
+                                    <th>Pledged %</th>
+                                    <th>Your P&L</th>
+                                    <th>Risk Level</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for signal in promoter_decreased %}
+                                <tr class="table-danger">
+                                    <td>
+                                        <strong>{{ signal.stock.symbol }}</strong><br>
+                                        <small class="text-muted">{{ signal.stock.company_name }}</small>
+                                    </td>
+                                    <td>
+                                        <strong>{{ signal.quantity }}</strong> shares<br>
+                                        <small class="text-muted">Avg: ₹{{ signal.avg_price|floatformat:2 }}</small>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-danger fs-6">
+                                            <i class="bi bi-arrow-down"></i> {{ signal.promoter_change|floatformat:2 }}%
+                                        </span>
+                                    </td>
+                                    <td>{{ signal.latest_promoter|floatformat:2 }}%</td>
+                                    <td>
+                                        {% if signal.promoter_pledged > 0 %}
+                                        <span class="badge bg-danger">{{ signal.promoter_pledged|floatformat:2 }}%</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">0%</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if signal.current_pnl >= 0 %}
+                                        <span class="text-success">+₹{{ signal.current_pnl|floatformat:2 }}</span>
+                                        {% else %}
+                                        <span class="text-danger">₹{{ signal.current_pnl|floatformat:2 }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-{{ signal.risk_level|lower }}">
+                                            {{ signal.risk_level }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-danger">SELL</span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="p-4 text-center text-success">
+                        <i class="bi bi-check-circle fs-1 mb-3 d-block"></i>
+                        <h5>All Clear! ✓</h5>
+                        <p>No sell signals for your holdings. Promoter confidence remains strong.</p>
+                    </div>
+                    {% endif %}
+                {% else %}
+                <div class="p-4 text-center text-muted">
+                    <i class="bi bi-inbox fs-1 mb-3 d-block"></i>
+                    <h5>No Portfolio Found</h5>
+                    <p>Import or add holdings to see sell signals</p>
+                    <a href="{% url 'portfolio:import_portfolio' %}" class="btn btn-primary mt-2">
+                        <i class="bi bi-upload"></i> Import Portfolio
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Entry Opportunities Section -->
+<div class="row mb-4">
+    <div class="col-12">
+        <h4 class="mb-3"><i class="bi bi-bullseye text-primary"></i> Entry Opportunities - When to Buy</h4>
+        <p class="text-muted">Ideal entry points based on price dips, corporate actions, and major announcements</p>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Price Dips -->
+    {% if entry_by_type.PRICE_DIP %}
+    <div class="col-md-6 mb-4">
+        <div class="card border-primary">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="bi bi-graph-down"></i> Price Dips (5-7%)</h5>
+                <small>Good entry after recent corrections</small>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0">
+                        <tbody>
+                            {% for opp in entry_by_type.PRICE_DIP %}
+                            <tr>
+                                <td>
+                                    <strong>{{ opp.stock.symbol }}</strong>
+                                    <span class="badge bg-{{ opp.signal_strength|lower }}{% if opp.signal_strength == 'STRONG' %} bg-success{% elif opp.signal_strength == 'MODERATE' %} bg-warning{% else %} bg-secondary{% endif %}">{{ opp.signal_strength }}</span>
+                                    <div class="text-muted small">{{ opp.description }}</div>
+                                    {% if opp.price_at_signal %}
+                                    <div class="small mt-1">
+                                        <span class="text-danger">₹{{ opp.price_at_signal }}</span>
+                                        {% if opp.percentage_change %}<span class="text-danger">({{ opp.percentage_change }}%)</span>{% endif %}
+                                    </div>
+                                    {% endif %}
+                                    <div class="small text-muted">Valid until: {{ opp.expires_at }}</div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- New Orders -->
+    {% if entry_by_type.ORDER_WIN %}
+    <div class="col-md-6 mb-4">
+        <div class="card border-success">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0"><i class="bi bi-bag-check"></i> New Orders/Contracts</h5>
+                <small>Major order wins and contract awards</small>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0">
+                        <tbody>
+                            {% for opp in entry_by_type.ORDER_WIN %}
+                            <tr>
+                                <td>
+                                    <strong>{{ opp.stock.symbol }}</strong>
+                                    <span class="badge bg-{{ opp.signal_strength|lower }}{% if opp.signal_strength == 'STRONG' %} bg-success{% elif opp.signal_strength == 'MODERATE' %} bg-warning{% else %} bg-secondary{% endif %}">{{ opp.signal_strength }}</span>
+                                    <div class="text-muted small">{{ opp.description }}</div>
+                                    <div class="small text-muted">Signal date: {{ opp.signal_date }}</div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Dividends -->
+    {% if entry_by_type.DIVIDEND %}
+    <div class="col-md-6 mb-4">
+        <div class="card border-info">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0"><i class="bi bi-cash-coin"></i> Dividend Announcements</h5>
+                <small>High dividend paying opportunities</small>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0">
+                        <tbody>
+                            {% for opp in entry_by_type.DIVIDEND %}
+                            <tr>
+                                <td>
+                                    <strong>{{ opp.stock.symbol }}</strong>
+                                    <span class="badge bg-{{ opp.signal_strength|lower }}{% if opp.signal_strength == 'STRONG' %} bg-success{% elif opp.signal_strength == 'MODERATE' %} bg-warning{% else %} bg-secondary{% endif %}">{{ opp.signal_strength }}</span>
+                                    <div class="text-muted small">{{ opp.description }}</div>
+                                    <div class="small text-muted">Announced: {{ opp.signal_date }}</div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Expansion/Acquisition -->
+    {% if entry_by_type.EXPANSION %}
+    <div class="col-md-6 mb-4">
+        <div class="card border-warning">
+            <div class="card-header bg-warning text-dark">
+                <h5 class="mb-0"><i class="bi bi-building-add"></i> Expansion/Acquisition</h5>
+                <small>Growth through expansion or M&A</small>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0">
+                        <tbody>
+                            {% for opp in entry_by_type.EXPANSION %}
+                            <tr>
+                                <td>
+                                    <strong>{{ opp.stock.symbol }}</strong>
+                                    <span class="badge bg-{{ opp.signal_strength|lower }}{% if opp.signal_strength == 'STRONG' %} bg-success{% elif opp.signal_strength == 'MODERATE' %} bg-warning{% else %} bg-secondary{% endif %}">{{ opp.signal_strength }}</span>
+                                    <div class="text-muted small">{{ opp.description }}</div>
+                                    <div class="small text-muted">Announced: {{ opp.signal_date }}</div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Stock Splits -->
+    {% if entry_by_type.SPLIT %}
+    <div class="col-md-6 mb-4">
+        <div class="card border-primary">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="bi bi-scissors"></i> Stock Splits</h5>
+                <small>Entry before split record date</small>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0">
+                        <tbody>
+                            {% for opp in entry_by_type.SPLIT %}
+                            <tr>
+                                <td>
+                                    <strong>{{ opp.stock.symbol }}</strong>
+                                    <span class="badge bg-success">STRONG</span>
+                                    <div class="text-muted small">{{ opp.description }}</div>
+                                    <div class="small text-muted">Announced: {{ opp.signal_date }}</div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Bonus Issues -->
+    {% if entry_by_type.BONUS %}
+    <div class="col-md-6 mb-4">
+        <div class="card border-success">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0"><i class="bi bi-gift"></i> Bonus Issues</h5>
+                <small>Free shares - enter before record date</small>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0">
+                        <tbody>
+                            {% for opp in entry_by_type.BONUS %}
+                            <tr>
+                                <td>
+                                    <strong>{{ opp.stock.symbol }}</strong>
+                                    <span class="badge bg-success">STRONG</span>
+                                    <div class="text-muted small">{{ opp.description }}</div>
+                                    <div class="small text-muted">Announced: {{ opp.signal_date }}</div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+{% if not entry_opportunities %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="alert alert-info">
+            <i class="bi bi-info-circle"></i> No active entry opportunities found. Run <code>python manage.py generate_entry_signals</code> to scan for new opportunities.
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Info Section -->
+<div class="row">
+    <div class="col-12">
+        <div class="card bg-light">
+            <div class="card-body">
+                <h5><i class="bi bi-info-circle"></i> About These Signals</h5>
+                <div class="row mt-3">
+                    <div class="col-md-4">
+                        <h6 class="text-success">Buy Signals</h6>
+                        <ul>
+                            <li><strong>FII Increase:</strong> Foreign institutions increasing stake shows international confidence</li>
+                            <li><strong>Top 50 Stocks:</strong> Blue-chip stocks from Nifty50/Sensex for value investing</li>
+                            <li><strong>Promoter Increase:</strong> Management increasing stake shows strong business confidence</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-4">
+                        <h6 class="text-primary">Entry Opportunities</h6>
+                        <ul>
+                            <li><strong>Price Dips:</strong> Buy quality stocks at discount</li>
+                            <li><strong>New Orders:</strong> Revenue growth catalyst</li>
+                            <li><strong>Dividends:</strong> Income + capital appreciation</li>
+                            <li><strong>Splits/Bonus:</strong> Increased liquidity benefits</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-4">
+                        <h6 class="text-danger">Sell Signals</h6>
+                        <ul>
+                            <li><strong>Promoter Decrease:</strong> Management reducing stake may indicate concerns about future prospects</li>
+                            <li>Higher pledged percentage increases risk</li>
+                            <li>Consider exiting if multiple negative signals align</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="alert alert-warning mt-3 mb-0">
+                    <i class="bi bi-exclamation-triangle"></i> 
+                    <strong>Disclaimer:</strong> These are automated signals based on historical data. Always do your own research and consult with a financial advisor before making investment decisions.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

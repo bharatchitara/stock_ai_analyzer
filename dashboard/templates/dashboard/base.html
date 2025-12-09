@@ -128,6 +128,18 @@
         
         .news-card {
             margin-bottom: 1rem;
+            overflow: hidden;
+        }
+        
+        .news-card a {
+            word-break: break-word;
+            overflow-wrap: break-word;
+            hyphens: auto;
+        }
+        
+        .news-card .flex-grow-1 {
+            min-width: 0;
+            overflow: hidden;
         }
         
         .stats-card {
@@ -138,6 +150,54 @@
         .chart-container {
             position: relative;
             height: 300px;
+        }
+        
+        /* Icon shape styling for cards */
+        .icon-shape {
+            width: 48px;
+            height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 0.75rem;
+            flex-shrink: 0;
+        }
+        
+        .icon-shape i {
+            font-size: 1.25rem;
+        }
+        
+        .icon-sm {
+            width: 40px;
+            height: 40px;
+        }
+        
+        .border-radius-md {
+            border-radius: 0.5rem;
+        }
+        
+        .bg-gradient-primary {
+            background: linear-gradient(195deg, #42424a 0%, #191919 100%);
+        }
+        
+        .bg-gradient-success {
+            background: linear-gradient(195deg, #66BB6A 0%, #43A047 100%);
+        }
+        
+        .bg-gradient-danger {
+            background: linear-gradient(195deg, #EF5350 0%, #E53935 100%);
+        }
+        
+        .bg-gradient-warning {
+            background: linear-gradient(195deg, #FFA726 0%, #FB8C00 100%);
+        }
+        
+        .bg-gradient-info {
+            background: linear-gradient(195deg, #26C6DA 0%, #00ACC1 100%);
+        }
+        
+        .bg-gradient-dark {
+            background: linear-gradient(195deg, #42424a 0%, #191919 100%);
         }
         
         footer {
@@ -175,6 +235,11 @@
                     <li class="nav-item">
                         <a class="nav-link" href="{% url 'dashboard:recommendations' %}">
                             <i class="bi bi-lightbulb"></i> Recommendations
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'dashboard:trading_signals' %}">
+                            <i class="bi bi-graph-up-arrow"></i> Trading Signals
                         </a>
                     </li>
                     <li class="nav-item dropdown">
